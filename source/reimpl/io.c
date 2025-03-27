@@ -45,7 +45,7 @@ FILE * fopen_soloader(const char * filename, const char * mode) {
     char fopen_path_real[1024];
     int AndriodSdcardPathLen=strlen(AndriodSdcardPath);
     if (sceClibStrncmp(filename, AndriodSdcardPath, AndriodSdcardPathLen) == 0) {
-        sceClibSnprintf(fopen_path_real, sizeof(fopen_path_real), "ux0:data/EternalLegacy/assets/%s", filename + AndriodSdcardPathLen);
+        sceClibSnprintf(fopen_path_real, sizeof(fopen_path_real), "ux0:data/EternalLegacy/GloftELHP/%s", filename + AndriodSdcardPathLen);
     } 
     else{
         int AndriodFullPathLen=strlen(AndriodFullPath);

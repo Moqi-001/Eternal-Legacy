@@ -1,6 +1,7 @@
 #include <falso_jni/FalsoJNI_Impl.h>
 #include <falso_jni/FalsoJNI.h>
 #include "utils/logger.h"
+#include "reimpl/io.h"
 #include <dirent.h>
 /*
  * JNI Methods
@@ -58,17 +59,64 @@ void OpenGLive(jmethodID id, va_list args) {
     debugPrintf("OpenGLive()");
 }
 
+long get_file_size(char *filename){
+    char fopen_path_real[1024];
+    memset(fopen_path_real,0,1024);
+    int count =strlen(filename);
+    sceClibSnprintf(fopen_path_real, sizeof(fopen_path_real), "ux0:data/EternalLegacy/GloftELHP/%s", filename );
+    FILE *fp = NULL;
+    if((fp = fopen(fopen_path_real,"r")) == NULL){
+        printf("获取文件失败");
+        return -1;
+    }
+    //从文件末尾偏移，偏移0位
+    fseek(fp,0,SEEK_END);
+    long file_size = ftell(fp);//ftell()存储当前文件描述符的读取的偏移位置，这里就是文件末尾
+    fclose(fp);
+    return file_size;
+}
+
 jint getResourceLength(jmethodID id, va_list args) {
     const char * value = va_arg(args, char*);
-    debugPrintf("getResourceLength(%s)",value);
-    return 0;
+    long length=get_file_size(value);
+    debugPrintf("getResourceLength(%s) %d",value,length);
+    return (jint)length;
+}
+
+void* getData(char* filename,int * num)
+{
+    char fopen_path_real[1024];
+    memset(fopen_path_real,0,1024);
+    int count =strlen(filename);
+    sceClibSnprintf(fopen_path_real, sizeof(fopen_path_real), "ux0:data/EternalLegacy/GloftELHP/%s", filename );
+    //replace(fopen_path_real,'/','~',1022);
+    FILE *fp = fopen(fopen_path_real, "r");
+    if (fp == NULL) {
+
+        return NULL;
+     }
+    fseek(fp, 0, SEEK_END);
+    int file_size = (int)ftell(fp);
+    *num=file_size;
+    char a[file_size]; 
+    int i = 0;
+    fseek(fp, 0, SEEK_SET);
+
+    while (i<file_size&&fscanf(fp, "%d", &a[i]) != EOF) {
+        i++;
+    }
+    fclose(fp);
+    return a;
 }
 
 jobject getResourceBytes(jmethodID id, va_list args) {
     const char * value = va_arg(args, char*);
     debugPrintf("getResourceBytes(%s)",value);
-    return NULL;
+    int num;
+    return (jobject)getData(value,&num);
 }
+
+
 
 void sendAppToBackground(jmethodID id, va_list args) {
 

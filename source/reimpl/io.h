@@ -100,6 +100,10 @@ FILE * fdopen_soloader(int fd, const char * mode);
 
 size_t fread_soloader(void * data, size_t _size, size_t _n, FILE * fd);
 
+void* getData(char* filename,int * num);
+
+long get_file_size(char *file_name);
+
 #ifdef __cplusplus
 };
 #endif
