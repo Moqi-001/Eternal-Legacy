@@ -1952,8 +1952,8 @@ void jni_init() {
     _jni->ReleaseLongArrayElements = ReleaseLongArrayElements;
     _jni->ReleaseFloatArrayElements = ReleaseFloatArrayElements;
     _jni->ReleaseDoubleArrayElements = ReleaseDoubleArrayElements;
-    _jni->GetBooleanArrayRegion = GetBooleanArrayRegion;
-    _jni->GetByteArrayRegion = GetByteArrayRegion;
+    _jni->GetBooleanArrayRegion = GetBooleanArrayRegion;//796
+    _jni->GetByteArrayRegion = GetByteArrayRegion;//800
     _jni->GetCharArrayRegion = GetCharArrayRegion;
     _jni->GetShortArrayRegion = GetShortArrayRegion;
     _jni->GetIntArrayRegion = GetIntArrayRegion;

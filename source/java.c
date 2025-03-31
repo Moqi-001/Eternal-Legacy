@@ -40,13 +40,13 @@ jint Get_DeviceLockState(jmethodID id, va_list args) {
 jint Get_logoVideoState(jmethodID id, va_list args) {
 
     debugPrintf("Get_logoVideoState(1)");
-    return 1;
+    return 0;
 }
 
 jint Get_PhoneManufacturer(jmethodID id, va_list args) {
 
-    debugPrintf("Get_PhoneManufacturer(12000000)");
-    return 12000000;
+    debugPrintf("Get_PhoneManufacturer(10)");
+    return 10;
 }
 
 jint loadMovie(jmethodID id, va_list args) {
@@ -135,7 +135,7 @@ jint getHeight(jmethodID id, va_list args) {
 
 jint getWidth(jmethodID id, va_list args) {
     debugPrintf("getWidth()");
-    return 940;
+    return 960;
 }
 
 jobject getResourceFull(jmethodID id, va_list args) {
@@ -252,11 +252,59 @@ jobject GetRealDeviceMacAddress(jmethodID id, va_list args) {
 void OpenIGP(jmethodID id, va_list args) {
     debugPrintf("OpenIGP()");
 }
+
 void openBrowser(jmethodID id, va_list args)
 {
     debugPrintf("openBrowser()");
 }
 
+void d(jmethodID id, va_list args)//mLicense
+{
+    debugPrintf("d()");
+}
+
+jobject da(jmethodID id, va_list args)//Activity
+{
+    debugPrintf("da()");
+    return NULL;
+}
+
+jobject db(jmethodID id, va_list args)//mFileConfig
+{
+    int num;
+    char* job= getData("ux0:data/EternalLegacy/raw/igli.bin",&num);
+    jbyteArray igli=NewByteArray(&jni,num);
+    for (size_t i = 0; i < num; i++)
+    {
+        SetObjectArrayElement(&jni,igli,i,job[i]);
+    }
+    return igli;
+}
+
+jobject dc(jmethodID id, va_list args)//mKEY
+{
+    int num;
+    char* job= getData("ux0:data/EternalLegacy/raw/serialkey.txt",&num);
+    jbyteArray serialkey=NewByteArray(&jni,num);
+    for (size_t i = 0; i < num; i++)
+    {
+        SetObjectArrayElement(&jni,serialkey,i,job[i]);
+    }
+    return serialkey;
+}
+
+jobject getSystemService(jmethodID id, va_list args)
+{
+    const char * value = va_arg(args, char*);
+    debugPrintf("getSystemService(%s)",value);
+    return "SystemService";
+}
+
+jobject getDeviceId(jmethodID id, va_list args)
+{
+    debugPrintf("getDeviceId()");
+    return "1234567891011";
+}
 
 NameToMethodID nameToMethodId[] = {
     { 1, "OpenGLive", METHOD_TYPE_VOID ,OpenGLive}, // ()V
@@ -326,6 +374,7 @@ MethodsVoid methodsVoid[] = {};
 // System-wide constant that applications sometimes request
 // https://developer.android.com/reference/android/content/Context.html#WINDOW_SERVICE
 char WINDOW_SERVICE[] = "window";
+char TELEPHONY_SERVICE[] = "TELEPHONY_SERVICE";
 
 // System-wide constant that's often used to determine Android version
 // https://developer.android.com/reference/android/os/Build.VERSION.html#SDK_INT
@@ -336,6 +385,7 @@ NameToFieldID nameToFieldId[] = {
 		{ 0, "WINDOW_SERVICE", FIELD_TYPE_OBJECT }, 
 		{ 1, "SDK_INT", FIELD_TYPE_INT },
         { 2, "descriptor", FIELD_TYPE_INT },
+        { 3, "TELEPHONY_SERVICE", FIELD_TYPE_OBJECT },
 };
 
 FieldsBoolean fieldsBoolean[] = {};
@@ -349,6 +399,7 @@ FieldsInt fieldsInt[] = {
 };
 FieldsObject fieldsObject[] = {
 		{ 0, WINDOW_SERVICE },
+		{ 3, TELEPHONY_SERVICE },
 };
 FieldsLong fieldsLong[] = {};
 FieldsShort fieldsShort[] = {};

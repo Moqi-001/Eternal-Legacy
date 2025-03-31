@@ -126,7 +126,7 @@ void controls_init() {
     sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, 1);
     sceTouchEnableTouchForce(SCE_TOUCH_PORT_FRONT);
 
-    nativeOnTouch = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_TBFV_GloftELHP_ML_GameGLSurfaceView_nativeOnTouch");
+    nativeOnTouch = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GameGLSurfaceView_nativeOnTouch");
     
 }
 
