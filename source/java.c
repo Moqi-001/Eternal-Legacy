@@ -349,6 +349,12 @@ NameToMethodID nameToMethodId[] = {
     { 41, "pauseSoundBig", METHOD_TYPE_INT ,pauseSoundBig}, 
     { 42, "playSoundBig", METHOD_TYPE_INT ,playSoundBig}, 
     { 43, "isSoundLoadedBig", METHOD_TYPE_INT ,isSoundLoadedBig}, 
+    { 44, "dc", METHOD_TYPE_INT ,dc}, 
+    { 45, "db", METHOD_TYPE_INT ,db}, 
+    { 46, "d", METHOD_TYPE_INT ,d}, 
+    { 47, "da", METHOD_TYPE_INT ,da}, 
+    { 48, "getSystemService", METHOD_TYPE_INT ,getSystemService}, 
+    { 49, "getDeviceId", METHOD_TYPE_INT ,getDeviceId}, 
 };
 
 MethodsBoolean methodsBoolean[] = {};
