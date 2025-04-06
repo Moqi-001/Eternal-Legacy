@@ -384,7 +384,7 @@ so_default_dynlib default_dynlib[] = {
         { "memcpy", (uintptr_t)&sceClibMemcpy },
         { "memmem", (uintptr_t)&memmem },
         { "memmove", (uintptr_t)&memmove },
-        { "memset", (uintptr_t)&memset },
+        { "memset", (uintptr_t)&memset_soloader },
         { "mmap", (uintptr_t)&mmap },
         { "munmap", (uintptr_t)&munmap },
         { "realloc", (uintptr_t)&realloc },

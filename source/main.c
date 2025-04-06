@@ -54,11 +54,13 @@ int main() {
     int (* JNI_OnLoad)(void *jvm) = (void *)so_symbol(&so_mod, "JNI_OnLoad");
     JNI_OnLoad(&jvm);
     gl_init();
+    //Java_com_gameloft_android_TBFV_GloftELHP_ML_GameRenderer_nativeGetJNIEnv
+    //Java_com_gameloft_android_GAND_GloftELHP_GameRenderer_nativeGetJNIEnv
     int (* nativeGetJNIEnv)(void *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GameRenderer_nativeGetJNIEnv");
     int (* GLResLoader_nativeInit)() = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GLResLoader_nativeInit");
     int (* GLMediaPlayer_nativeInit)(void *,void *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GLMediaPlayer_nativeInit");
 	int (* GameRenderer_nativeInit)(void *,int,int) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GameRenderer_nativeInit");
-	int (* EternalLegacy_nativeInit)(void *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_EternalLegacy_nativeInit");
+	int (* EternalLegacy_nativeInit)(void *,char *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_EternalLegacy_nativeInit");
     int (* nativeResize)(int,int,int,int) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GameRenderer_nativeResize");
     int (* nativeKeyboardEnabled)(int,int,int) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_EternalLegacy_nativeKeyboardEnabled");
     
@@ -74,7 +76,7 @@ int main() {
     GameRenderer_nativeInit(&jni,0,1);
     debugPrintf("GameRenderer_nativeInit over \n");
 
-    EternalLegacy_nativeInit(&jni);
+    EternalLegacy_nativeInit(&jni,"java");
     debugPrintf("EternalLegacy_nativeInit over \n");
     
     //eglSwapInterval(0, 2);

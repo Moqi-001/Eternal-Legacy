@@ -83,7 +83,7 @@ int dup_soloader(int fd)
 
 size_t fread_soloader(void * data, size_t _size, size_t _n, FILE * fd)
 {
-    debugPrintf("fread:%x  _size:%d  _n:%d",fd,_size,_n);
+    //debugPrintf("fread:%x  _size:%d  _n:%d",fd,_size,_n);
     return fread(data,_size,_n,fd);
 }
 
@@ -171,6 +171,13 @@ int close_soloader(int fd) {
     int ret = close(fd);
     l_debug("close(%i): %i", fd, ret);
     return ret;
+}
+
+void * memset_soloader (void * p, int v, size_t n)
+{
+    l_debug("memset(%p, %d,%d)", p, v,n);
+
+    return memset(p,v,n);
 }
 
 DIR* opendir_soloader(char* _pathname) {

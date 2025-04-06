@@ -96,6 +96,8 @@ int fsync_soloader(int fd);
 
 int dup_soloader(int fd);
 
+void * memset_soloader (void * p, int v, size_t n);
+
 FILE * fdopen_soloader(int fd, const char * mode);
 
 size_t fread_soloader(void * data, size_t _size, size_t _n, FILE * fd);

@@ -189,7 +189,6 @@ jobject NewGlobalRef(JNIEnv* env, jobject obj) {
     // The concept of global/local references really makes sense only with
     // a real JVM. Here, since we basically operate with shared global pointers
     // everywhere, it should be safe to just return `obj` back
-
     return obj;
 }
 

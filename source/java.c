@@ -271,6 +271,7 @@ jobject da(jmethodID id, va_list args)//Activity
 
 jobject db(jmethodID id, va_list args)//mFileConfig
 {
+    debugPrintf("db()");
     int num;
     char* job= getData("ux0:data/EternalLegacy/raw/igli.bin",&num);
     jbyteArray igli=NewByteArray(&jni,num);
@@ -283,6 +284,7 @@ jobject db(jmethodID id, va_list args)//mFileConfig
 
 jobject dc(jmethodID id, va_list args)//mKEY
 {
+    debugPrintf("dc()");
     int num;
     char* job= getData("ux0:data/EternalLegacy/raw/serialkey.txt",&num);
     jbyteArray serialkey=NewByteArray(&jni,num);
@@ -307,6 +309,7 @@ jobject getDeviceId(jmethodID id, va_list args)
 }
 
 NameToMethodID nameToMethodId[] = {
+
     { 1, "OpenGLive", METHOD_TYPE_VOID ,OpenGLive}, // ()V
     { 2, "sendAppToBackground", METHOD_TYPE_VOID ,sendAppToBackground}, // ()V
     { 3, "destroySoundPool", METHOD_TYPE_VOID ,destroySoundPool}, // (I)V
@@ -328,9 +331,10 @@ NameToMethodID nameToMethodId[] = {
     { 19, "getHeight", METHOD_TYPE_INT ,getHeight}, // ([BII)I
     { 20, "getWidth", METHOD_TYPE_INT ,getWidth}, // ([BII)I
     { 21, "unloadSound", METHOD_TYPE_INT ,unloadSound}, // ([BII)I
-    { 22, "GetCurrentTime", METHOD_TYPE_LONG ,NULL}, // ([BII)I
+    { 22, "GetCurrentTime", METHOD_TYPE_LONG ,GetCurrentTime}, // ([BII)I
     { 23, "stopAllPool", METHOD_TYPE_INT ,stopAllPool}, // ([BII)I
     { 24, "isSoundLoaded", METHOD_TYPE_INT ,isSoundLoaded}, // ([BII)I
+    { 25, "null", METHOD_TYPE_INT ,NULL}, // ([BII)I
     { 26, "Get_DeviceLockState", METHOD_TYPE_INT ,Get_DeviceLockState}, // ([BII)I
     { 27, "Get_logoVideoState", METHOD_TYPE_INT ,Get_logoVideoState}, // ([BII)I
     { 28, "Exit", METHOD_TYPE_INT ,Exit}, // ([BII)I
