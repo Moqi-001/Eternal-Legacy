@@ -183,12 +183,16 @@ jobject PopLocalFrame(JNIEnv* env, jobject result) {
     return NULL;
 }
 
+char* GlobalRef="GlobalRef";
+
 jobject NewGlobalRef(JNIEnv* env, jobject obj) {
     fjni_logv_dbg("[JNI] NewGlobalRef(env, 0x%x)", (int)obj);
 
     // The concept of global/local references really makes sense only with
     // a real JVM. Here, since we basically operate with shared global pointers
     // everywhere, it should be safe to just return `obj` back
+    if(obj==NULL)
+     return GlobalRef;
     return obj;
 }
 
