@@ -80,7 +80,8 @@ int pthread_attr_init_soloader(pthread_attr_t_bionic *attr);
 int pthread_attr_destroy_soloader(pthread_attr_t_bionic *attr);
 int pthread_attr_setdetachstate_soloader(pthread_attr_t_bionic *attr, int state);
 int pthread_attr_setstacksize_soloader(pthread_attr_t_bionic *attr, size_t stacksize);
-
+int  pthread_key_create_soloader (pthread_key_t * key,void (*destructor) (void *));
+void*  pthread_getspecific_soloader (pthread_key_t key);
 int pthread_setname_np_soloader(pthread_t thread, const char *thread_name);
 
 int sem_init_soloader(int *sem, int pshared, unsigned int value);

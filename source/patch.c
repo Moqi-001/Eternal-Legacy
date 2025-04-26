@@ -25,6 +25,11 @@ void MC_knlPrintk(char* name)
     debugPrintf(name);
 }
 
+void _ZN13ALicenseCheck10LoadConfigEv()
+{
+    debugPrintf("_ZN13ALicenseCheck10LoadConfigEv");
+}
+
 void* NVThreadGetCurrentJNIEnv()
 {
     debugPrintf("NVThreadGetCurrentJNIEnv");
@@ -44,7 +49,10 @@ void so_patch(void) {
     // Sample hook
     //hook_addr((uintptr_t)so_symbol(&so_mod, "MC_knlPrintk"), (uintptr_t)&MC_knlPrintk);
     //hook_addr((uintptr_t)so_symbol(&so_mod, "_NVThreadGetCurrentJNIEnv_veneer"), (uintptr_t)&NVThreadGetCurrentJNIEnv);
-    hook_addr((uintptr_t)so_symbol(&so_mod, "_ZN13ALicenseCheck15CallJNIFuncCharEP7_"), (uintptr_t)&_ZN13ALicenseCheck15CallJNIFuncCharEP7_);
+    //hook_addr((uintptr_t)so_symbol(&so_mod, "_ZN13ALicenseCheck15CallJNIFuncCharEP7_"), (uintptr_t)&_ZN13ALicenseCheck15CallJNIFuncCharEP7_);
+    //hook_addr((uintptr_t)so_symbol(&so_mod, "_ZN13ALicenseCheck15CallJNIFuncCharEP7_"), (uintptr_t)&_ZN13ALicenseCheck15CallJNIFuncCharEP7_);
+    hook_addr((uintptr_t)so_symbol(&so_mod, "_ZN13ALicenseCheck10LoadConfigEv"), (uintptr_t)&_ZN13ALicenseCheck10LoadConfigEv);
+    
     // char ** GVfs = (char **) so_symbol(&so_mod, "GVfs");
     // *GVfs = malloc(60);
     // //**GVfs = 0;

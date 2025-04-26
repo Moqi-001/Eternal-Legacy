@@ -242,6 +242,19 @@ int pthread_mutex_unlock_soloader(pthread_mutex_t_bionic *mutex)
     return pthread_mutex_unlock(mutex->real_ptr);
 }
 
+void* pthread_getspecific_soloader(pthread_key_t key)
+{
+    debugPrintf("pthread_getspecific");
+    return pthread_getspecific(key);
+}
+
+int pthread_key_create_soloader(pthread_key_t * key,
+                             void (*destructor) (void *))
+{
+    debugPrintf("pthread_key_create");
+    return pthread_key_create(key,destructor);
+}
+
 int pthread_join_soloader(pthread_t thread, void **value_ptr)
 {
     return pthread_join(thread, value_ptr);

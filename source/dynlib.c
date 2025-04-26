@@ -808,9 +808,9 @@ so_default_dynlib default_dynlib[] = {
         { "pthread_equal", (uintptr_t) &pthread_equal_soloader },
         { "pthread_exit", (uintptr_t)&pthread_exit },
         { "pthread_getschedparam", (uintptr_t) &pthread_getschedparam_soloader },
-        { "pthread_getspecific", (uintptr_t)&pthread_getspecific },
+        { "pthread_getspecific", (uintptr_t)&pthread_getspecific_soloader },
         { "pthread_join", (uintptr_t) &pthread_join_soloader },
-        { "pthread_key_create", (uintptr_t)&pthread_key_create },
+        { "pthread_key_create", (uintptr_t)&pthread_key_create_soloader },
         { "pthread_key_delete", (uintptr_t)&pthread_key_delete },
         { "pthread_kill", (uintptr_t)&pthread_kill_soloader },
 

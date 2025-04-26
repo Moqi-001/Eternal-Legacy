@@ -184,6 +184,7 @@ jobject PopLocalFrame(JNIEnv* env, jobject result) {
 }
 
 char* GlobalRef="GlobalRef";
+char* GlobalRef2="GlobalRef2";
 
 jobject NewGlobalRef(JNIEnv* env, jobject obj) {
     fjni_logv_dbg("[JNI] NewGlobalRef(env, 0x%x)", (int)obj);
@@ -192,7 +193,7 @@ jobject NewGlobalRef(JNIEnv* env, jobject obj) {
     // a real JVM. Here, since we basically operate with shared global pointers
     // everywhere, it should be safe to just return `obj` back
     if(obj==NULL)
-     return GlobalRef;
+     return GlobalRef2;
     return obj;
 }
 

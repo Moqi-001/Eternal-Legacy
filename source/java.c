@@ -116,10 +116,11 @@ jobject getResourceBytes(jmethodID id, va_list args) {
     return (jobject)getData(value,&num);
 }
 
-
+void SetIGPLanguage(jmethodID id, va_list args) {
+    debugPrintf("SetIGPLanguage()");
+}
 
 void sendAppToBackground(jmethodID id, va_list args) {
-
     debugPrintf("sendAppToBackground()");
 }
 
@@ -307,9 +308,7 @@ jobject getDeviceId(jmethodID id, va_list args)
     debugPrintf("getDeviceId()");
     return "1234567891011";
 }
-
 NameToMethodID nameToMethodId[] = {
-
     { 1, "OpenGLive", METHOD_TYPE_VOID ,OpenGLive}, // ()V
     { 2, "sendAppToBackground", METHOD_TYPE_VOID ,sendAppToBackground}, // ()V
     { 3, "destroySoundPool", METHOD_TYPE_VOID ,destroySoundPool}, // (I)V
@@ -359,6 +358,8 @@ NameToMethodID nameToMethodId[] = {
     { 47, "da", METHOD_TYPE_INT ,da}, 
     { 48, "getSystemService", METHOD_TYPE_INT ,getSystemService}, 
     { 49, "getDeviceId", METHOD_TYPE_INT ,getDeviceId}, 
+    { 50, "SetIGPLanguage", METHOD_TYPE_INT ,SetIGPLanguage}, 
+    
 };
 
 MethodsBoolean methodsBoolean[] = {};

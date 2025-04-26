@@ -40,6 +40,27 @@
         "so_util.h": "c",
         "utils.h": "c",
         "libc_bridge.h": "c",
-        "io.h": "c"
+        "io.h": "c",
+        "atomic": "cpp",
+        "*.tcc": "cpp",
+        "cctype": "cpp",
+        "clocale": "cpp",
+        "compare": "cpp",
+        "cstdio": "cpp",
+        "cstdlib": "cpp",
+        "cstring": "cpp",
+        "cwchar": "cpp",
+        "cwctype": "cpp",
+        "vector": "cpp",
+        "string_view": "cpp",
+        "memory": "cpp",
+        "random": "cpp",
+        "limits": "cpp",
+        "new": "cpp",
+        "numeric": "cpp",
+        "sstream": "cpp",
+        "stdexcept": "cpp",
+        "streambuf": "cpp",
+        "cinttypes": "cpp"
     }
 }

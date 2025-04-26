@@ -59,6 +59,7 @@ int main() {
     int (* nativeGetJNIEnv)(void *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GameRenderer_nativeGetJNIEnv");
     int (* GLResLoader_nativeInit)() = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GLResLoader_nativeInit");
     int (* GLMediaPlayer_nativeInit)(void *,void *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GLMediaPlayer_nativeInit");
+    int (* GLUtils_Device_nativeInit)(void *,void *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GLUtils_Device_nativeInit");
 	int (* GameRenderer_nativeInit)(void *,int,int) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GameRenderer_nativeInit");
 	int (* EternalLegacy_nativeInit)(void *,char *) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_EternalLegacy_nativeInit");
     int (* nativeResize)(int,int,int,int) = (void *)so_symbol(&so_mod, "Java_com_gameloft_android_GAND_GloftELHP_GameRenderer_nativeResize");
@@ -66,6 +67,9 @@ int main() {
     
     nativeGetJNIEnv(&jni);
     debugPrintf("nativeGetJNIEnv over \n");
+
+    GLUtils_Device_nativeInit(&jni,&jni);
+    debugPrintf("GLUtils_Device_nativeInit over \n");
 
     GLResLoader_nativeInit();
     debugPrintf("GLResLoader_nativeInit over \n");
