@@ -259,10 +259,12 @@ void openBrowser(jmethodID id, va_list args)
     debugPrintf("openBrowser()");
 }
 
-void d(jmethodID id, va_list args)//mLicense
-{
-    debugPrintf("d()");
-}
+// void d(jmethodID id, va_list args)//mLicense
+// {
+//     debugPrintf("d()");
+// }
+
+char *Id="1234567891011";
 
 jobject da(jmethodID id, va_list args)//Activity
 {
@@ -275,6 +277,8 @@ jobject db(jmethodID id, va_list args)//mFileConfig
     debugPrintf("db()");
     int num;
     char* job= getData("ux0:data/EternalLegacy/raw/igli.bin",&num);
+    if(job==NULL)
+    return Id;
     jbyteArray igli=NewByteArray(&jni,num);
     for (size_t i = 0; i < num; i++)
     {
@@ -288,6 +292,8 @@ jobject dc(jmethodID id, va_list args)//mKEY
     debugPrintf("dc()");
     int num;
     char* job= getData("ux0:data/EternalLegacy/raw/serialkey.txt",&num);
+    if(job==NULL)
+    return Id;
     jbyteArray serialkey=NewByteArray(&jni,num);
     for (size_t i = 0; i < num; i++)
     {
@@ -306,8 +312,58 @@ jobject getSystemService(jmethodID id, va_list args)
 jobject getDeviceId(jmethodID id, va_list args)
 {
     debugPrintf("getDeviceId()");
-    return "1234567891011";
+    return Id;
 }
+
+jobject a(jmethodID id, va_list args)
+{
+    debugPrintf("a()");
+    return Id;
+}
+
+jobject b(jmethodID id, va_list args)
+{
+    debugPrintf("b()");
+    return "OperatorName";
+}
+
+
+jobject c(jmethodID id, va_list args)
+{
+    debugPrintf("c()");
+    return "00";
+}
+
+jobject d(jmethodID id, va_list args)
+{
+    debugPrintf("d()");
+    return "1.0.8";
+}
+
+void e(jmethodID id, va_list args)
+{
+     int v1 = va_arg(args, int);
+    debugPrintf("e(%d)",v1);
+}
+
+jobject f(jmethodID id, va_list args)
+{
+    debugPrintf("IsWifiEnable()");
+    return "GL_EMU_001";
+}
+
+jint IsWifiEnable(jmethodID id, va_list args)
+{
+    debugPrintf("IsWifiEnable()");
+    return 0;
+}
+
+jobject getHostName(jmethodID id, va_list args)
+{
+    debugPrintf("getHostName()");
+    return "psv_psp2";
+}
+
 NameToMethodID nameToMethodId[] = {
     { 1, "OpenGLive", METHOD_TYPE_VOID ,OpenGLive}, // ()V
     { 2, "sendAppToBackground", METHOD_TYPE_VOID ,sendAppToBackground}, // ()V
@@ -359,6 +415,14 @@ NameToMethodID nameToMethodId[] = {
     { 48, "getSystemService", METHOD_TYPE_INT ,getSystemService}, 
     { 49, "getDeviceId", METHOD_TYPE_INT ,getDeviceId}, 
     { 50, "SetIGPLanguage", METHOD_TYPE_INT ,SetIGPLanguage}, 
+    { 51, "a", METHOD_TYPE_INT ,a}, 
+    { 52, "b", METHOD_TYPE_INT ,b}, 
+    { 53, "c", METHOD_TYPE_INT ,c}, 
+    { 54, "d", METHOD_TYPE_INT ,d}, 
+    { 55, "e", METHOD_TYPE_INT ,e}, 
+    { 56, "f", METHOD_TYPE_INT ,f}, 
+    { 57, "IsWifiEnable", METHOD_TYPE_INT ,IsWifiEnable}, 
+    { 58, "getHostName", METHOD_TYPE_INT ,getHostName}, 
     
 };
 
