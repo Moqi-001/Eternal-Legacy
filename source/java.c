@@ -36,11 +36,11 @@ jint Get_DeviceLockState(jmethodID id, va_list args) {
     debugPrintf("Get_DeviceLockState(12000000)");
     return 12000000;
 }
-
+int state=0;
 jint Get_logoVideoState(jmethodID id, va_list args) {
 
-    debugPrintf("Get_logoVideoState(1)");
-    return 0;
+    debugPrintf("Get_logoVideoState() %d",state);
+    return state;
 }
 
 jint Get_PhoneManufacturer(jmethodID id, va_list args) {
@@ -264,7 +264,7 @@ void openBrowser(jmethodID id, va_list args)
 //     debugPrintf("d()");
 // }
 
-char *Id="1234567891011";
+char *Id="12345678910";
 
 jobject da(jmethodID id, va_list args)//Activity
 {
@@ -272,11 +272,33 @@ jobject da(jmethodID id, va_list args)//Activity
     return NULL;
 }
 
+void* getRawData(char* filename,int * num)
+{
+    FILE *fp = fopen(filename, "r");
+    if (fp == NULL) {
+        return NULL;
+     }
+    fseek(fp, 0, SEEK_END);
+    int file_size = (int)ftell(fp);
+    *num=file_size;
+    char a[file_size]; 
+    int i = 0;
+    fseek(fp, 0, SEEK_SET);
+
+    while (i<file_size&&fscanf(fp, "%d", &a[i]) != EOF) {
+        i++;
+    }
+    fclose(fp);
+    return a;
+}
+
 jobject db(jmethodID id, va_list args)//mFileConfig
 {
+    return Id;
+
     debugPrintf("db()");
     int num;
-    char* job= getData("ux0:data/EternalLegacy/raw/igli.bin",&num);
+    char* job= getRawData("ux0:data/EternalLegacy/raw/igli.bin",&num);
     if(job==NULL)
     return Id;
     jbyteArray igli=NewByteArray(&jni,num);
@@ -289,9 +311,13 @@ jobject db(jmethodID id, va_list args)//mFileConfig
 
 jobject dc(jmethodID id, va_list args)//mKEY
 {
+    if(state<2)
+    state++;
+    return Id;
+
     debugPrintf("dc()");
     int num;
-    char* job= getData("ux0:data/EternalLegacy/raw/serialkey.txt",&num);
+    char* job= getRawData("ux0:data/EternalLegacy/raw/serialkey.txt",&num);
     if(job==NULL)
     return Id;
     jbyteArray serialkey=NewByteArray(&jni,num);
@@ -318,7 +344,13 @@ jobject getDeviceId(jmethodID id, va_list args)
 jobject a(jmethodID id, va_list args)
 {
     debugPrintf("a()");
-    return Id;
+    int num=10;
+    jbyteArray ida=NewByteArray(&jni,num);
+    for (size_t i = 0; i < num; i++)
+    {
+        SetObjectArrayElement(&jni,ida,i,Id[i]);
+    }
+    return ida;
 }
 
 jobject b(jmethodID id, va_list args)
@@ -364,6 +396,39 @@ jobject getHostName(jmethodID id, va_list args)
     return "psv_psp2";
 }
 
+void AudioTrack(jmethodID id, va_list args)
+{
+    debugPrintf("android/media/AudioTrack/<init>()");
+}
+
+jint getMinBufferSize(jmethodID id, va_list args)
+{
+    debugPrintf("getMinBufferSize()");
+    return 0;
+}
+
+void play(jmethodID id, va_list args)
+{
+    debugPrintf("play()");
+}
+void pause(jmethodID id, va_list args)
+{
+    debugPrintf("pause()");
+}
+void stop(jmethodID id, va_list args)
+{
+    debugPrintf("stop()");
+}
+void release(jmethodID id, va_list args)
+{
+    debugPrintf("release()");
+}
+
+jint write(jmethodID id, va_list args)
+{
+    debugPrintf("write()");
+    return 0;
+}
 NameToMethodID nameToMethodId[] = {
     { 1, "OpenGLive", METHOD_TYPE_VOID ,OpenGLive}, // ()V
     { 2, "sendAppToBackground", METHOD_TYPE_VOID ,sendAppToBackground}, // ()V
@@ -423,6 +488,13 @@ NameToMethodID nameToMethodId[] = {
     { 56, "f", METHOD_TYPE_INT ,f}, 
     { 57, "IsWifiEnable", METHOD_TYPE_INT ,IsWifiEnable}, 
     { 58, "getHostName", METHOD_TYPE_INT ,getHostName}, 
+    { 59, "android/media/AudioTrack/<init>", METHOD_TYPE_INT ,AudioTrack}, 
+    { 60, "getMinBufferSize", METHOD_TYPE_INT ,getMinBufferSize}, 
+    { 61, "play", METHOD_TYPE_INT ,play}, 
+    { 62, "pause", METHOD_TYPE_INT ,pause}, 
+    { 63, "stop", METHOD_TYPE_INT ,stop}, 
+    { 64, "release", METHOD_TYPE_INT ,release}, 
+    { 65, "write", METHOD_TYPE_INT ,write}, 
     
 };
 
