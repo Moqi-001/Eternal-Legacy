@@ -197,6 +197,11 @@ bool str_ends_with(const char * str, const char * suffix);
  */
 char * str_sha1sum(const char * str, size_t size);
 
+int glTexImage3DOES(void);
+int glTexSubImage3DOES(void);
+int glCompressedTexImage3DOES(void);
+int glCompressedTexSubImage3DOES(void);
+
 #ifdef __cplusplus
 };
 #endif

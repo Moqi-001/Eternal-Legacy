@@ -255,6 +255,26 @@ bool module_loaded(const char * name) {
     return _vshKernelSearchModuleByName(name, search_unk) >= 0;
 }
 
+int glTexImage3DOES(void) {
+    debugPrintf("glTexImage3DOES");
+    return 0;
+}
+
+int glTexSubImage3DOES(void) {
+    debugPrintf("glTexSubImage3DOES");
+    return 0;
+}
+
+int glCompressedTexImage3DOES(void) {
+    debugPrintf("glCompressedTexImage3DOES");
+    return 0;
+}
+
+int glCompressedTexSubImage3DOES(void) {
+    debugPrintf("glCompressedTexSubImage3DOES");
+    return 0;
+}
+
 int ret0(void) {
     return 0;
 }

@@ -69,7 +69,7 @@ FILE * fopen_soloader(const char * filename, const char * mode) {
     }
     else
     {
-        l_warn("fopen(%s, %s): %p", fopen_path_real, mode, ret);
+        l_warn("not find fopen(%s, %s): %p", fopen_path_real, mode, ret);
     }
 
     return ret;
@@ -83,7 +83,7 @@ int dup_soloader(int fd)
 
 size_t fread_soloader(void * data, size_t _size, size_t _n, FILE * fd)
 {
-    //debugPrintf("fread:%x  _size:%d  _n:%d",fd,_size,_n);
+    debugPrintf("fread:%x  _size:%d  _n:%d",fd,_size,_n);
     return fread(data,_size,_n,fd);
 }
 

@@ -44,6 +44,7 @@ int main_thread(SceSize args, void *argp)
           nativeRender();
           gl_swap();
      }
+    //nativeRender();
     debugPrintf("RenderUpdate over \n");
 	return 0;
 }

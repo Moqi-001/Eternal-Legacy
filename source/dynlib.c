@@ -1035,10 +1035,10 @@ so_default_dynlib default_dynlib[] = {
         { "inflateReset", (uintptr_t)&inflateReset },
         { "uncompress", (uintptr_t)&uncompress },
 
-        { "glTexImage3DOES", (uintptr_t)&ret0},
-        { "glTexSubImage3DOES", (uintptr_t)&ret0},
-        { "glCompressedTexImage3DOES", (uintptr_t)&ret0},
-        { "glCompressedTexSubImage3DOES", (uintptr_t)&ret0},
+        { "glTexImage3DOES", (uintptr_t)&glTexImage3DOES},
+        { "glTexSubImage3DOES", (uintptr_t)&glTexSubImage3DOES},
+        { "glCompressedTexImage3DOES", (uintptr_t)&glCompressedTexImage3DOES},
+        { "glCompressedTexSubImage3DOES", (uintptr_t)&glCompressedTexSubImage3DOES},
         
         { "__aeabi_dcmpun", (uintptr_t)&__aeabi_dcmpun},
         { "__aeabi_fadd", (uintptr_t)&__aeabi_fadd},

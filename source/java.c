@@ -62,18 +62,31 @@ void OpenGLive(jmethodID id, va_list args) {
 long get_file_size(char *filename){
     char fopen_path_real[1024];
     memset(fopen_path_real,0,1024);
-    int count =strlen(filename);
+    //int count =strlen(filename);
     sceClibSnprintf(fopen_path_real, sizeof(fopen_path_real), "ux0:data/EternalLegacy/GloftELHP/%s", filename );
-    FILE *fp = NULL;
-    if((fp = fopen(fopen_path_real,"r")) == NULL){
-        printf("获取文件失败");
+    debugPrintf(fopen_path_real);
+    SceUID fd = sceIoOpen(fopen_path_real, SCE_O_RDONLY, 0);
+    if (fd < 0)
+    {
+        debugPrintf("get file failed");
         return -1;
     }
-    //从文件末尾偏移，偏移0位
-    fseek(fp,0,SEEK_END);
-    long file_size = ftell(fp);//ftell()存储当前文件描述符的读取的偏移位置，这里就是文件末尾
-    fclose(fp);
-    return file_size;
+    size_t size = sceIoLseek(fd, 0, SCE_SEEK_END);
+	sceIoClose(fd);
+    
+    debugPrintf("size: %d",size);
+    return size;
+    
+    // FILE *fp = NULL;
+    // if((fp = fopen(fopen_path_real,"r")) == NULL){
+    //     debugPrintf("get file failed");
+    //     return -1;
+    // }
+    // //从文件末尾偏移，偏移0位
+    // fseek(fp,0,SEEK_END);
+    // long file_size = ftell(fp);//ftell()存储当前文件描述符的读取的偏移位置，这里就是文件末尾
+    // fclose(fp);
+    // return file_size;
 }
 
 jint getResourceLength(jmethodID id, va_list args) {
@@ -90,23 +103,39 @@ void* getData(char* filename,int * num)
     int count =strlen(filename);
     sceClibSnprintf(fopen_path_real, sizeof(fopen_path_real), "ux0:data/EternalLegacy/GloftELHP/%s", filename );
     //replace(fopen_path_real,'/','~',1022);
-    FILE *fp = fopen(fopen_path_real, "r");
-    if (fp == NULL) {
-
+    SceUID fd = sceIoOpen(fopen_path_real, SCE_O_RDONLY, 0);
+    if (fd < 0)
+    {
+        debugPrintf("get file failed");
         return NULL;
-     }
-    fseek(fp, 0, SEEK_END);
-    int file_size = (int)ftell(fp);
-    *num=file_size;
-    char a[file_size]; 
-    int i = 0;
-    fseek(fp, 0, SEEK_SET);
-
-    while (i<file_size&&fscanf(fp, "%d", &a[i]) != EOF) {
-        i++;
     }
-    fclose(fp);
-    return a;
+    size_t size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    *num=size;
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+    uint8_t *buffer = (uint8_t*)malloc(size);
+	sceIoRead(fd, buffer, size);
+	sceIoClose(fd);
+    debugPrintf(fopen_path_real);
+    debugPrintf("size: %d",size);
+    return buffer;
+
+    // FILE *fp = fopen(fopen_path_real, "r");
+    // if (fp == NULL) {
+
+    //     return NULL;
+    //  }
+    // fseek(fp, 0, SEEK_END);
+    // int file_size = (int)ftell(fp);
+    // *num=file_size;
+    // char a[file_size]; 
+    // int i = 0;
+    // fseek(fp, 0, SEEK_SET);
+
+    // while (i<file_size&&fscanf(fp, "%d", &a[i]) != EOF) {
+    //     i++;
+    // }
+    // fclose(fp);
+    // return a;
 }
 
 jobject getResourceBytes(jmethodID id, va_list args) {
@@ -274,28 +303,42 @@ jobject da(jmethodID id, va_list args)//Activity
 
 void* getRawData(char* filename,int * num)
 {
-    FILE *fp = fopen(filename, "r");
-    if (fp == NULL) {
+    SceUID fd = sceIoOpen(filename, SCE_O_RDONLY, 0);
+    if (fd < 0)
+    {
+        debugPrintf("get file failed");
         return NULL;
-     }
-    fseek(fp, 0, SEEK_END);
-    int file_size = (int)ftell(fp);
-    *num=file_size;
-    char a[file_size]; 
-    int i = 0;
-    fseek(fp, 0, SEEK_SET);
-
-    while (i<file_size&&fscanf(fp, "%d", &a[i]) != EOF) {
-        i++;
     }
-    fclose(fp);
-    return a;
+    size_t size = sceIoLseek(fd, 0, SCE_SEEK_END);
+    *num=size;
+    sceIoLseek(fd, 0, SCE_SEEK_SET);
+    uint8_t *buffer = (uint8_t*)malloc(size);
+	sceIoRead(fd, buffer, size);
+	sceIoClose(fd);
+    debugPrintf(filename);
+    debugPrintf("size: %d",size);
+    return buffer;
+
+    // FILE *fp = fopen(filename, "r");
+    // if (fp == NULL) {
+    //     return NULL;
+    //  }
+    // fseek(fp, 0, SEEK_END);
+    // int file_size = (int)ftell(fp);
+    // *num=file_size;
+    // char a[file_size]; 
+    // int i = 0;
+    // fseek(fp, 0, SEEK_SET);
+
+    // while (i<file_size&&fscanf(fp, "%d", &a[i]) != EOF) {
+    //     i++;
+    // }
+    // fclose(fp);
+    // return a;
 }
 
 jobject db(jmethodID id, va_list args)//mFileConfig
 {
-    return Id;
-
     debugPrintf("db()");
     int num;
     char* job= getRawData("ux0:data/EternalLegacy/raw/igli.bin",&num);
@@ -306,6 +349,7 @@ jobject db(jmethodID id, va_list args)//mFileConfig
     {
         SetObjectArrayElement(&jni,igli,i,job[i]);
     }
+    free(job);
     return igli;
 }
 
@@ -313,18 +357,19 @@ jobject dc(jmethodID id, va_list args)//mKEY
 {
     if(state<2)
     state++;
-    return Id;
 
     debugPrintf("dc()");
     int num;
     char* job= getRawData("ux0:data/EternalLegacy/raw/serialkey.txt",&num);
     if(job==NULL)
     return Id;
+    debugPrintf("db(%s)",Id);
     jbyteArray serialkey=NewByteArray(&jni,num);
     for (size_t i = 0; i < num; i++)
     {
         SetObjectArrayElement(&jni,serialkey,i,job[i]);
     }
+    free(job);
     return serialkey;
 }
 
@@ -495,7 +540,6 @@ NameToMethodID nameToMethodId[] = {
     { 63, "stop", METHOD_TYPE_INT ,stop}, 
     { 64, "release", METHOD_TYPE_INT ,release}, 
     { 65, "write", METHOD_TYPE_INT ,write}, 
-    
 };
 
 MethodsBoolean methodsBoolean[] = {};

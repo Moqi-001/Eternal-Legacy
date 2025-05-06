@@ -31,9 +31,9 @@ option(USE_SCELIBC_IO "Use SceLibcBridge for IO and some other std functions" OF
 if (USE_SCELIBC_IO)
   add_definitions(-DUSE_SCELIBC_IO)
 endif()
-#add_definitions(-DDEBUG_FILE)
+add_definitions(-DDEBUG_FILE)
 
-set(SHADER_FORMAT "GLSL" CACHE STRING "Preferred shader format (one of 'GLSL', 'CG', 'GXP')")
+set(SHADER_FORMAT "CG" CACHE STRING "Preferred shader format (one of 'GLSL', 'CG', 'GXP')")
 if (${SHADER_FORMAT} STREQUAL "GLSL")
   add_definitions(-DUSE_GLSL_SHADERS)
 elseif (${SHADER_FORMAT} STREQUAL "CG")

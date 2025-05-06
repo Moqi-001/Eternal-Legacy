@@ -35,6 +35,7 @@
     }
 
 int __android_log_write(int prio, const char* tag, const char* text) {
+    debugPrintf("%s %s", tag, text);
     print_common
     return 0;
 }
