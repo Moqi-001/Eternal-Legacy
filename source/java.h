@@ -9,13 +9,13 @@ extern "C" {
 
 #include "java/Device.h"
 #include "java/EternalLegacy.h"
-#include "java/GLMediaPlayer.h"
-#include "java/GLResLoader.h"
 #include "java/GameGLSurfaceView.h"
 #include "java/GameRenderer.h"
+#include "java/GLMediaPlayer.h"
+#include "java/GLResLoader.h"
 
 // 所有 Java 类在这里注册。native 绑定要用 .so 的导出，所以模块要先加载。
-int soloader_setup_java(so_module *mod);
+int soloader_setup_java(void);
 
 #ifdef __cplusplus
 };

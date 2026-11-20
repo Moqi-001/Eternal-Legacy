@@ -13,11 +13,18 @@
 
 #include "GameGLSurfaceView.h"
 #include "GLMediaPlayer.h"
+#include "utils/paths.h"
+#include "video_player.h"
 
+/*
+ * 开场视频的状态，对应安卓上 MyVideoView 写的 GLMediaPlayer.e：
+ *   0 未播放 / 1 播放中 / 2 播完
+ * 引擎必须看到 0 → 1 → 2 这个顺序，直接跳到 2 它会在 nativeInit 里一直等。
+ */
 static JClass sClass            = NULL;
-static int    sLogoVideoStarted = 0;
-static int    sLogoVideoPolls   = 0;
-static int    sLogoVideoDone    = 0;
+static int    sLogoVideoStarted = 0;  // 引擎已经请求过视频
+static int    sLogoVideoSeen    = 0;  // 已经给引擎报过几次“播放中”
+static int    sLogoVideoDone    = 0;  // 已经报过“播完”（终态）
 
 static void (*native_Init)(JNIEnv *env, jclass clazz, jint flag);
 static jint (*native_GetTotalSounds)(JNIEnv *env, jclass clazz);
@@ -37,17 +44,22 @@ static JInt GLMediaPlayer_Get_PhoneManufacturer(void) {
 }
 
 static JInt GLMediaPlayer_Get_logoVideoState(void) {
-    // 0 未播放 / 1 播放中 / 2 播完（Java 侧 MyVideoView 与它的 OnCompletionListener 写这两个值）
-    if (sLogoVideoStarted) {
-        if (++sLogoVideoPolls > 3) {
-            sLogoVideoStarted = 0;
-            sLogoVideoDone    = 1;
-        } else {
-            return 1;
-        }
+    so_loga("[GLMediaPlayer]: Get_logoVideoState: is_playing=%d", video_is_playing());
+
+    if (sLogoVideoDone) {
+        return 2;  // 播完是终态，一直回 2
+    }
+    if (!sLogoVideoStarted) {
+        return 0;
     }
 
-    return sLogoVideoDone ? 2 : 0;
+    // 真在播；或者视频起不来，也要先让引擎看到一两次“播放中”
+    if (video_is_playing() || sLogoVideoSeen++ < 2) {
+        return 1;
+    }
+
+    sLogoVideoDone = 1;
+    return 2;
 }
 
 static JInt GLMediaPlayer_detectPhoneLang(void) {
@@ -80,13 +92,29 @@ static JInt GLMediaPlayer_isMediaPlaying(JInt media_id) {
 }
 
 static JInt GLMediaPlayer_loadMovie(JString name) {
-    // 视频暂不接入：按"播放中"报几次再报"播完"，让引擎走完它的视频流程
-    so_logi("[JAVA] GLMediaPlayer.loadMovie(%s): 跳过播放", name ? String_getUTFChars(name) : "NULL");
+    if (!name) {
+        return 0;
+    }
+
+    char        buf[PATH_MAPPED_MAX];
+    char        android_path[PATH_MAPPED_MAX];
+    const char *movie = String_getUTFChars(name);
+
+    snprintf(android_path, sizeof(android_path), "/sdcard/gameloft/games/GloftELHP/%s", movie);
+    const char *path = paths_from_android(android_path, buf, sizeof(buf));
 
     sLogoVideoStarted = 1;
-    sLogoVideoPolls   = 0;
+    sLogoVideoSeen    = 0;
     sLogoVideoDone    = 0;
 
+    if (video_open(path, 1.0f) == 0 && video_play() == 0) {
+        so_loga("[JAVA] GLMediaPlayer.loadMovie(%s): 播放 %s", movie, path);
+        return 1;
+    }
+
+    // 解码器打不开（编码不支持等）：按“播完”上报，游戏继续往下走
+    so_loga("[JAVA] GLMediaPlayer.loadMovie(%s): 播放不了，跳过", movie);
+    video_close();
     return 1;
 }
 

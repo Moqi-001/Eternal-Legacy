@@ -13,6 +13,8 @@ int  soloader_init();
 int  soloader_run();
 void soloader_term();
 
+int IsRunningInVita3K();
+
 #ifdef __cplusplus
 };
 #endif

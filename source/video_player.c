@@ -1,11 +1,14 @@
 /*
- * 开场 mp4 播放（SceAvPlayer）
+ * 开场 mp4 播放（SceAvPlayer + 硬件 YUV 纹理）
  *
- * 当前未接入：GLMediaPlayer.loadMovie 直接按"播完"处理，视频留给后续再做
- * —— Vita3K 的 SceAvPlayer 在这条流程之后会让模拟器宿主崩溃（VCRUNTIME140
- * 0xc0000005），需要实机确认或等模拟器修复。
+ * 安卓上这些视频是独立 Activity 里用 MediaPlayer 播的，移植后由宿主自己画：
+ * 视频在播时不驱动游戏渲染，只把解码帧铺到屏幕上（见 loader.c）。
+ *
+ * 流程照 bio4：打开解码器 → 建纹理与着色器 → 起音频线程 → 播完关闭。
+ * 解码帧是 YVU420P2，直接把 phycont 帧指针塞进 SceGxmTexture，不再上传像素。
  */
 #include <malloc.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <psp2/audioout.h>
@@ -14,12 +17,13 @@
 #include <psp2/gxm.h>
 #include <psp2/kernel/sysmem.h>
 #include <psp2/kernel/threadmgr.h>
-#include <pthread.h>
+#include <psp2/sysmodule.h>
 #include <psp2/touch.h>
+#include <pthread.h>
 #include <so_common/so_logger.h>
 #include <vitaGL.h>
 
-#include "config.h"
+#include "loader.h"
 #include "video_player.h"
 
 #define MAX_AUDIO_VOLUME    32767
@@ -33,20 +37,20 @@ enum {
     PLAYER_PLAYING,
 };
 
-static volatile int      player_state                    = PLAYER_STOPPED;
-static SceAvPlayerHandle player_handle                   = 0;
+static volatile int      player_state  = PLAYER_STOPPED;
+static SceAvPlayerHandle player_handle = 0;
 
 // 引擎线程（loadMovie/状态查询）和宿主渲染线程、音频线程都会碰播放器句柄，
 // 句柄的读写统一在这把锁里做；等音频线程退出时不能持锁
-static pthread_mutex_t   player_mutex                    = PTHREAD_MUTEX_INITIALIZER;
-static SceUID            audio_thid                      = -1;
-static int               audio_volume                    = MAX_AUDIO_VOLUME;
-static GLuint            gl_textures[NUM_VIDEO_BUFFERS]  = {0};
-static SceGxmTexture    *gxm_textures[NUM_VIDEO_BUFFERS] = {0};
-static int               frame_idx                       = 0;
-static GLuint            movie_fs                        = GL_NONE;
-static GLuint            movie_vs                        = GL_NONE;
-static GLuint            movie_prog                      = GL_NONE;
+static pthread_mutex_t player_mutex                    = PTHREAD_MUTEX_INITIALIZER;
+static SceUID          audio_thid                      = -1;
+static int             audio_volume                    = MAX_AUDIO_VOLUME;
+static GLuint          gl_textures[NUM_VIDEO_BUFFERS]  = {0};
+static SceGxmTexture  *gxm_textures[NUM_VIDEO_BUFFERS] = {0};
+static int             frame_idx                       = 0;
+static GLuint          movie_fs                        = GL_NONE;
+static GLuint          movie_vs                        = GL_NONE;
+static GLuint          movie_prog                      = GL_NONE;
 
 static const char *movie_v =
     "attribute vec2 a_position;\n"
@@ -121,10 +125,10 @@ static int audio_thread(SceSize args, void *argp) {
 
     while (player_state != PLAYER_STOPPED) {
         SceAvPlayerFrameInfo frame;
-        int                 has_data = 0;
+        int                  has_data = 0;
 
         pthread_mutex_lock(&player_mutex);
-        if (player_state == PLAYER_PLAYING && player_handle > 0 && sceAvPlayerIsActive(player_handle)) {
+        if (player_state == PLAYER_PLAYING && player_handle && sceAvPlayerIsActive(player_handle)) {
             has_data = sceAvPlayerGetAudioData(player_handle, &frame);
         }
         pthread_mutex_unlock(&player_mutex);
@@ -142,8 +146,29 @@ static int audio_thread(SceSize args, void *argp) {
     return sceKernelExitDeleteThread(0);
 }
 
+/*
+ * 解码器事件：READY / 错误 / 结束都从这里报上来。
+ * 我们用 autoStart 起播，起播状态只能靠它确认。
+ */
+static void player_event(void *unused, int32_t event, int32_t source, void *data) {
+    (void)unused;
+    (void)data;
+
+    so_logd("[VIDEO] event=%d source=%d", (int)event, (int)source);
+}
+
 int video_open(const char *filepath, float volume) {
+    if (player_handle) {
+        video_close();
+    }
+
+    if (sceSysmoduleIsLoaded(SCE_SYSMODULE_AVPLAYER) < 0 && !IsRunningInVita3K()) {
+        sceSysmoduleLoadModule(SCE_SYSMODULE_AVPLAYER);
+    }
+
     audio_volume = volume * MAX_AUDIO_VOLUME;
+
+    so_logd("[VIDEO] video_open(%s,%f)...", filepath, volume);
 
     SceAvPlayerInitData init_data;
     memset(&init_data, 0, sizeof(SceAvPlayerInitData));
@@ -154,6 +179,7 @@ int video_open(const char *filepath, float volume) {
     init_data.basePriority                        = 0xA0;
     init_data.numOutputVideoFrameBuffers          = 3;
     init_data.autoStart                           = 1;
+    init_data.eventReplacement.eventCallback      = player_event;
     // init_data.debugLevel                          = 3;
 
     player_handle = sceAvPlayerInit(&init_data);
@@ -162,6 +188,8 @@ int video_open(const char *filepath, float volume) {
         return -1;
     }
     if (sceAvPlayerAddSource(player_handle, filepath) < 0) {
+        sceAvPlayerClose(player_handle);
+        player_handle = 0;
         so_loge("[VIDEO] sceAvPlayerAddSource failed!");
         return -1;
     }
@@ -192,41 +220,49 @@ int video_open(const char *filepath, float volume) {
 
     player_state = PLAYER_PAUSED;
 
+    pthread_mutex_init(&player_mutex, NULL);
+
     audio_thid = sceKernelCreateThread("audio_thread", audio_thread, 0x10000100, 0x10000, 0, 0, NULL);
     if (audio_thid < 0) {
+        video_close();
         so_loge("[VIDEO] sceKernelCreateThread failed!");
         return -1;
     }
     if (sceKernelStartThread(audio_thid, 0, NULL) < 0) {
+        video_close();
         so_loge("[VIDEO] sceKernelStartThread failed!");
         return -1;
     }
+
+    so_logd("[VIDEO] video_open(): OK!");
 
     return 0;
 }
 
 void video_close() {
-    // 先置状态再等音频线程：它看到 STOPPED 就会退出循环，
-    // 等线程期间不能持锁，否则它拿不到锁没法退出
+    if (!player_handle) {
+        return;
+    }
+
+    so_logd("[VIDEO] video_close()");
+
+    // 先置状态再放锁：音频线程每轮都要拿这把锁才能看到 STOPPED 退出，
+    // 持锁等它结束会互相卡死
     pthread_mutex_lock(&player_mutex);
     player_state = PLAYER_STOPPED;
-    pthread_mutex_unlock(&player_mutex);
 
     if (audio_thid >= 0) {
+        pthread_mutex_unlock(&player_mutex);
+
         sceKernelWaitThreadEnd(audio_thid, NULL, NULL);
+        // sceKernelDeleteThread(audio_thid);
+        audio_thid = -1;
+
+        pthread_mutex_lock(&player_mutex);
     }
 
-    if (player_handle) {
-        sceAvPlayerStop(player_handle);
-    }
-
-    pthread_mutex_lock(&player_mutex);
-    if (player_handle) {
-        sceAvPlayerClose(player_handle);
-        player_handle = 0;
-    }
-    pthread_mutex_unlock(&player_mutex);
-    audio_thid = -1;
+    // GPU 先停下，再让解码器释放帧缓冲；纹理对象要在帧内存还挂着的时候删
+    glFinish();
 
     glDeleteTextures(NUM_VIDEO_BUFFERS, gl_textures);
     glDeleteProgram(movie_prog);
@@ -235,25 +271,39 @@ void video_close() {
     movie_fs   = GL_NONE;
     movie_vs   = GL_NONE;
     movie_prog = GL_NONE;
+
+    sceAvPlayerStop(player_handle);
+    sceAvPlayerClose(player_handle);
+    player_handle = 0;
+
+    pthread_mutex_unlock(&player_mutex);
+    pthread_mutex_destroy(&player_mutex);
 }
 
 int video_draw() {
+    if (!player_handle) {
+        return -1;
+    }
+
     SceAvPlayerFrameInfo frame;
-    int                 got_frame = 0;
 
     pthread_mutex_lock(&player_mutex);
-    if (player_state != PLAYER_STOPPED) {
-        // 播完就落下状态：调用方下一帧回到游戏画面，Get_logoVideoState 也就成了"播完"
-        if (player_handle <= 0 || !sceAvPlayerIsActive(player_handle)) {
-            player_state = PLAYER_STOPPED;
-        } else {
-            // 解码器还在跑但这一帧还没解出来时保持播放状态，等下一帧
-            got_frame = sceAvPlayerGetVideoData(player_handle, &frame);
-        }
+    if (!player_handle || player_state != PLAYER_PLAYING) {
+        so_logd("[VIDEO] video_draw() not ready");
+        pthread_mutex_unlock(&player_mutex);
+        return 0;
     }
-    pthread_mutex_unlock(&player_mutex);
 
-    if (!got_frame) {
+    if (!sceAvPlayerIsActive(player_handle)) {
+        so_logd("[VIDEO] video_draw() not ctive");
+        player_state = PLAYER_STOPPED;
+        pthread_mutex_unlock(&player_mutex);
+        return 0;
+    }
+
+    if (!sceAvPlayerGetVideoData(player_handle, &frame)) {
+        so_logd("[VIDEO] video_draw() no video data");
+        pthread_mutex_unlock(&player_mutex);
         return 0;
     }
 
@@ -282,27 +332,64 @@ int video_draw() {
 
     frame_idx = (frame_idx + 1) % NUM_VIDEO_BUFFERS;
 
+    pthread_mutex_unlock(&player_mutex);
     return 1;
 }
 
 int video_play() {
-    pthread_mutex_lock(&player_mutex);
-    if (player_handle > 0) {
-        player_state = PLAYER_PLAYING;
+    if (!player_handle) {
+        return -1;
     }
-    pthread_mutex_unlock(&player_mutex);
 
-    return player_handle > 0 ? 0 : -1;
+    so_logd("[VIDEO] video_play()");
+    pthread_mutex_lock(&player_mutex);
+    player_state = PLAYER_PLAYING;
+    pthread_mutex_unlock(&player_mutex);
+    return 0;
 }
 
 int video_pause() {
+    if (!player_handle) {
+        return -1;
+    }
+
+    so_logd("[VIDEO] video_pause()");
     pthread_mutex_lock(&player_mutex);
     player_state = PLAYER_PAUSED;
     pthread_mutex_unlock(&player_mutex);
+    return 0;
+}
 
+int video_stop() {
+    if (!player_handle) {
+        return -1;
+    }
+
+    so_logd("[VIDEO] video_stop()");
+    pthread_mutex_lock(&player_mutex);
+    player_state = PLAYER_STOPPED;
+    pthread_mutex_unlock(&player_mutex);
     return 0;
 }
 
 int video_is_playing() {
-    return player_state == PLAYER_PLAYING;
+    if (!player_handle) {
+        return 0;
+    }
+
+    pthread_mutex_lock(&player_mutex);
+    int is_playing = player_handle && sceAvPlayerIsActive(player_handle) && player_state == PLAYER_PLAYING;
+    pthread_mutex_unlock(&player_mutex);
+    return is_playing;
+}
+
+int video_is_active() {
+    if (!player_handle) {
+        return 0;
+    }
+
+    pthread_mutex_lock(&player_mutex);
+    int is_active = player_handle && sceAvPlayerIsActive(player_handle);
+    pthread_mutex_unlock(&player_mutex);
+    return is_active;
 }

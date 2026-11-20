@@ -89,7 +89,7 @@ static uint32_t *_class_create_hashtab(JSymbol *symbols, JInt num_symbols) {
 }
 
 // 沿父类链查找：Java 的方法/字段查找本来就包含继承来的成员
-static JSymbol *_class_find_symbol(const JavaClassImpl *cls, uint32_t hash, const char *name, const char *sig, int flags) {
+static JSymbol *_class_find_symbol(const JavaClassImpl *cls, uint32_t hash, const char *name, const char *sig, uint32_t flags, uint32_t mask) {
     for (const JavaClassImpl *current = cls; current; current = current->super) {
         if (!current->hashtab) {
             continue;
@@ -107,7 +107,7 @@ static JSymbol *_class_find_symbol(const JavaClassImpl *cls, uint32_t hash, cons
         uint32_t *chains  = buckets + nbucket;
 
         for (uint32_t i = buckets[hash % nbucket]; i < nchain; i = chains[i]) {
-            if (meta->symbols[i].flags == flags) {
+            if ((meta->symbols[i].flags & mask) == flags) {
                 if (strcmp(meta->symbols[i].name, name) == 0 && strcmp(meta->symbols[i].signature, sig) == 0) {
                     return &meta->symbols[i];
                 }
@@ -184,10 +184,10 @@ static JInt _class_ctor(JavaClassImpl *cls, JClassMeta *meta) {
         return JAVA_ERR;
     }
 
-    cls->magic   = JAVA_CLASS_MAGIC;
-    cls->meta    = meta;
-    cls->reg     = NULL;
-    cls->super   = _find_class(meta->super_name);
+    cls->magic = JAVA_CLASS_MAGIC;
+    cls->meta  = meta;
+    cls->reg   = NULL;
+    cls->super = _find_class(meta->super_name);
 
     // 没有成员的类（只做类型标识）合法，不需要哈希表
     if (meta->num_symbols > 0) {
@@ -265,8 +265,9 @@ const JSymbol *Class_findMethodSymbol(const JClass clazz, const char *name, cons
     if (is_static) {
         flags |= JAVA_SYMBOL_FLAGS_STATIC;
     }
+    uint32_t mask = ~0u;
 
-    return _class_find_symbol(cls, hash, name, sig, flags);
+    return _class_find_symbol(cls, hash, name, sig, flags, mask);
 }
 
 const JSymbol *Class_findFieldSymbol(const JClass clazz, const char *name, const char *sig, JBoolean is_static) {
@@ -280,8 +281,9 @@ const JSymbol *Class_findFieldSymbol(const JClass clazz, const char *name, const
     if (is_static) {
         flags |= JAVA_SYMBOL_FLAGS_STATIC;
     }
+    uint32_t mask = ~0u;
 
-    return _class_find_symbol(cls, hash, name, sig, flags);
+    return _class_find_symbol(cls, hash, name, sig, flags, mask);
 }
 
 const JSymbol *Class_findNativeSymbol(const JClass clazz, const char *name, const char *sig) {
@@ -292,8 +294,9 @@ const JSymbol *Class_findNativeSymbol(const JClass clazz, const char *name, cons
 
     uint32_t hash  = _java_hash(name, sig);
     uint32_t flags = JAVA_SYMBOL_FLAGS_NATIVE | JAVA_SYMBOL_FLAGS_METHOD;
+    uint32_t mask  = flags; // native 方法在查找时不分 static
 
-    return _class_find_symbol(cls, hash, name, sig, flags);
+    return _class_find_symbol(cls, hash, name, sig, flags, mask);
 }
 
 JClass Class_getSuper(JClass clazz) {

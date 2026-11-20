@@ -18,6 +18,7 @@
 #include "patch.h"
 #include "utils/dialog.h"
 #include "utils/utils.h"
+#include "video_player.h"
 
 extern so_library liblog_so;
 extern so_library libz_so;
@@ -31,6 +32,7 @@ extern so_library libc_so;
 extern so_library libstdcxx_so;
 
 so_module *EternalLegacy_mod = NULL;
+int        is_vita3k         = 0;
 
 /* 为了兼容vita3k。vita3k不支持kubridge插件，但它有kuKernelMemProtect等函数实现。
  * 当判断插件未加载时再判断这个函数是否有绑定，这样的判断可实现对实机和vita3k都通用的检测。*/
@@ -45,9 +47,12 @@ static int is_unbound_stub(const void *fn) {
 
 static int check_kubridge() {
     int search_unk[2];
-    if (_vshKernelSearchModuleByName("kubridge", search_unk) < 0 && is_unbound_stub(kuKernelMemProtect)) {
-        fatal_error("[LOADER] kubridge.skprx is not installed.");
-        return -1;
+    if (_vshKernelSearchModuleByName("kubridge", search_unk) < 0) {
+        if (is_unbound_stub(kuKernelMemProtect)) {
+            fatal_error("[LOADER] kubridge.skprx is not installed.");
+            return -1;
+        }
+        is_vita3k = 1;
     }
     return 0;
 }
@@ -133,15 +138,13 @@ int soloader_init() {
     so_jni_init();
 
     soloader_setup_modules();
-    controls_create();
 
-    // 只加载游戏库。StormGLOFT 是改包方塞进来的钩子库（JNI_OnLoad 里把 dlopen
-    // 的句柄当 bionic soinfo 去改游戏的 GL GOT 槽），不加载它也能跑
     EternalLegacy_mod = soloader_load_library("EternalLegacy");
-
-    // Java 类要在 native 被调用前注册好；native 绑定依赖已重定位的模块
-    soloader_setup_java(EternalLegacy_mod);
     soloader_patch_modules();
+
+    // Java 类注册应在 module 加载后，调用 native 前
+    soloader_setup_java();
+    soloader_setup_controls();
 
     soloader_init_opengl();
 
@@ -162,7 +165,7 @@ int soloader_init() {
  * 引擎在 nativeInit 里会开 256 KB 的栈缓冲区（ALicenseCheck::LoadConfig），
  * 跑在 256 KB 的主线程栈上会溢出；安卓那边这段在 GL 线程里跑，默认 1 MB。
  */
-static int render_thread(SceSize args, void *argp) {
+static int run_thread(SceSize args, void *argp) {
     (void)args;
     (void)argp;
 
@@ -170,9 +173,26 @@ static int render_thread(SceSize args, void *argp) {
     GameRenderer_onSurfaceChanged(SCREEN_W, SCREEN_H);
     GameGLSurfaceView_onWindowFocusChanged();
 
+    int video_was_playing = 0;
     while (!EternalLegacy_should_quit()) {
-        controls_poll();
-        GameRenderer_onDrawFrame();
+        soloader_poll_controls();
+
+        if (video_is_playing()) {
+            video_draw();
+            video_was_playing = 1;
+        } else {
+            // 视频播完等于安卓上 MyVideoView 结束、切回游戏 Activity：
+            // Activity.onResume → onWindowFocusChanged(true) → nativeResume
+            if (video_was_playing) {
+                video_was_playing = 0;
+                video_close();
+
+                EternalLegacy_onResume();
+                GameGLSurfaceView_onWindowFocusChanged();
+            }
+            GameRenderer_onDrawFrame();
+        }
+
         vglSwapBuffers(GL_TRUE);
     }
 
@@ -189,8 +209,7 @@ int soloader_run() {
 
     GameGLSurfaceView_onSizeChanged(SCREEN_W, SCREEN_H);
 
-    SceUID thid = sceKernelCreateThread("GLThread", render_thread, 0x10000100, SCREEN_THREAD_STACK,
-                                        0, 0, NULL);
+    SceUID thid = sceKernelCreateThread("GLThread", run_thread, 0x10000100, 1024 * 1024, 0, 0, NULL);
     if (thid < 0) {
         so_logf("[LOADER] failed to create render thread: %#x", thid);
         return -1;
@@ -214,4 +233,8 @@ void soloader_term() {
     so_linker_fini();
 
     so_logd("[LOADER] soloader_term success!");
+}
+
+int IsRunningInVita3K() {
+    return is_vita3k;
 }

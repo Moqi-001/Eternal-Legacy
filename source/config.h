@@ -4,14 +4,10 @@
 #define SCREEN_W 960
 #define SCREEN_H 544
 
-// 渲染线程栈：引擎在 nativeInit 里要用到 256 KB 以上的栈（ALicenseCheck::LoadConfig），
-// 安卓上这段跑在 GL 线程（默认 1 MB）
-#define SCREEN_THREAD_STACK (1024 * 1024)
-
 #define MEMORY_NEWLIB_MB            256
 #define VITAGL_RAM_THRESHOLD_MB     20
 #define VITAGL_CDRAM_THRESHOLD_MB   4
-#define VITAGL_PHYCONT_THRESHOLD_MB 8
+#define VITAGL_PHYCONT_THRESHOLD_MB 16
 #define VITAGL_CDIALOG_THRESHOLD_MB 12
 
 #define SO_LIB_DIR    DATA_PATH "lib/armeabi-v7a/"

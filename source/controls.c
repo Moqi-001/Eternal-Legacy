@@ -40,8 +40,8 @@ typedef struct {
 
 // 屏幕按钮坐标：右上暂停、右下交互/动作
 static ButtonTouch s_buttons[] = {
-    { SCE_CTRL_START, 925, 40,  2, 0 },
-    { SCE_CTRL_CROSS, 855, 455, 3, 0 },
+    {SCE_CTRL_START, 925, 40,  2, 0},
+    {SCE_CTRL_CROSS, 855, 455, 3, 0},
 };
 
 // Java 侧只对返回/菜单键查状态，其余键码引擎不处理（只打日志）
@@ -51,9 +51,9 @@ typedef struct {
 } ButtonMap;
 
 static const ButtonMap s_key_map[] = {
-    { SCE_CTRL_CIRCLE, AKEYCODE_BACK },
-    { SCE_CTRL_START,  AKEYCODE_MENU },
-    { SCE_CTRL_SELECT, AKEYCODE_BUTTON_SELECT },
+    {SCE_CTRL_CIRCLE, AKEYCODE_BACK         },
+    {SCE_CTRL_START,  AKEYCODE_MENU         },
+    {SCE_CTRL_SELECT, AKEYCODE_BUTTON_SELECT},
 };
 
 static unsigned int s_prev_buttons = 0;
@@ -188,7 +188,7 @@ static void controls_send_key_edges(unsigned int pressed, unsigned int released)
     }
 }
 
-int controls_create(void) {
+int soloader_setup_controls(void) {
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG_WIDE);
     sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
 
@@ -203,7 +203,7 @@ int controls_create(void) {
     return 0;
 }
 
-void controls_poll(void) {
+void soloader_poll_controls(void) {
     SceCtrlData pad;
     if (sceCtrlPeekBufferPositive(0, &pad, 1) < 0) {
         return;
