@@ -1,0 +1,16 @@
+# Opus codec reference implementation pkg-config file
+
+prefix=/usr/local/vitasdk/arm-vita-eabi
+exec_prefix=/usr/local/vitasdk/arm-vita-eabi
+libdir=/usr/local/vitasdk/arm-vita-eabi/lib
+includedir=/usr/local/vitasdk/arm-vita-eabi/include
+
+Name: Opus
+Description: Opus IETF audio codec ( build)
+URL: https://opus-codec.org/
+Version: 1.6.1
+Requires:
+Conflicts:
+Libs: -L/usr/local/vitasdk/arm-vita-eabi/lib -lopus
+Libs.private: -lm
+Cflags: -I/usr/local/vitasdk/arm-vita-eabi/include/opus

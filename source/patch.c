@@ -1,62 +1,23 @@
 /*
- * Copyright (C) 2023 Volodymyr Atamanenko
+ * 补丁总入口
  *
- * This software may be modified and distributed under the terms
- * of the MIT license. See the LICENSE file for details.
+ * 结构约定：
+ *   patch.c/.h      —— 总入口，只对外暴露 soloader_patch_modules()
+ *   patch/<模块>.c  —— 各 .so 真正的补丁实现，模块指针由这里传入
  */
+#include <psp2/io/stat.h>
 
-/**
- * @file  patch.c
- * @brief Patching some of the .so internal functions or bridging them to native
- *        for better compatibility.
- */
+#include "config.h"
+#include "loader.h"
+#include "patch.h"
+#include "patch/paths.h"
 
-#include <kubridge.h>
-// #include <string.h>
-// #include <stdlib.h>
-#include <so_util/so_util.h>
-#include "utils/logger.h"
-#include <falso_jni/FalsoJNI.h>
+int soloader_patch_modules() {
+    // 引擎按自己写死的安卓路径找资源和库文件
+    soloader_patch_paths(EternalLegacy_mod);
 
-extern so_module so_mod;
+    // 可写目录（存档走 /data/data/<包名>/ → files/）
+    sceIoMkdir(DATA_PATH "files", 0777);
 
-void MC_knlPrintk(char* name)
-{
-    debugPrintf(name);
-}
-
-void _ZN13ALicenseCheck10LoadConfigEv()
-{
-    debugPrintf("_ZN13ALicenseCheck10LoadConfigEv");
-}
-
-void* NVThreadGetCurrentJNIEnv()
-{
-    debugPrintf("NVThreadGetCurrentJNIEnv");
-    return &jni;
-}
-
-void _ZN13ALicenseCheck15CallJNIFuncCharEP7_(int class,int id,char * out,int max)
-{
-    debugPrintf("_ZN13ALicenseCheck15CallJNIFuncCharEP7_");
-    memset(out,0,max);
-    jbyteArray v= CallStaticObjectMethod(jni,class,id);
-    jint len= GetArrayLength(jni,v);
-    GetByteArrayRegion(jni,v,0,len,out);
-}
-
-void so_patch(void) {
-    // Sample hook
-    //hook_addr((uintptr_t)so_symbol(&so_mod, "MC_knlPrintk"), (uintptr_t)&MC_knlPrintk);
-    //hook_addr((uintptr_t)so_symbol(&so_mod, "_NVThreadGetCurrentJNIEnv_veneer"), (uintptr_t)&NVThreadGetCurrentJNIEnv);
-    //hook_addr((uintptr_t)so_symbol(&so_mod, "_ZN13ALicenseCheck15CallJNIFuncCharEP7_"), (uintptr_t)&_ZN13ALicenseCheck15CallJNIFuncCharEP7_);
-    //hook_addr((uintptr_t)so_symbol(&so_mod, "_ZN13ALicenseCheck15CallJNIFuncCharEP7_"), (uintptr_t)&_ZN13ALicenseCheck15CallJNIFuncCharEP7_);
-    hook_addr((uintptr_t)so_symbol(&so_mod, "_ZN13ALicenseCheck10LoadConfigEv"), (uintptr_t)&_ZN13ALicenseCheck10LoadConfigEv);
-    
-    // char ** GVfs = (char **) so_symbol(&so_mod, "GVfs");
-    // *GVfs = malloc(60);
-    // //**GVfs = 0;
-    // memset(*GVfs,0,60);
-    //debugPrintf("set GVfs over");
-    
+    return 0;
 }

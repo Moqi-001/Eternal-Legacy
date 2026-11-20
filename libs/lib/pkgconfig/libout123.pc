@@ -1,0 +1,12 @@
+prefix=/usr/local/vitasdk/arm-vita-eabi
+exec_prefix=/usr/local/vitasdk/arm-vita-eabi
+libdir=/usr/local/vitasdk/arm-vita-eabi/lib
+includedir=/usr/local/vitasdk/arm-vita-eabi/include
+
+Name: libout123
+Description: A streaming audio output API derived from mpg123
+Requires: 
+Version: 1.33.4
+Libs: -L${libdir} -lout123 
+Libs.private:  -lm 
+Cflags: -I${includedir} 

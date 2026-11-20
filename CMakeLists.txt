@@ -1,3 +1,11 @@
+#
+# so_loader 模板工程的构建脚本
+#
+# vendor/ 是加载器源码，source/ 是移植者要改的代码，
+# libs/ 是预编译库，resources/ 是随包分发的资源。
+# 用法：把整个仓库复制成 <游戏名>/，然后只改 source/ 和下面标了「改这里」的几项。
+# 详细说明见 docs/PORTING.md。
+#
 cmake_minimum_required(VERSION 3.14)
 
 if (NOT DEFINED ENV{VITASDK} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -5,174 +13,178 @@ if (NOT DEFINED ENV{VITASDK} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
 endif ()
 
 set(CMAKE_TOOLCHAIN_FILE "$ENV{VITASDK}/share/vita.toolchain.cmake" CACHE PATH "Toolchain file")
+include("$ENV{VITASDK}/share/vita.cmake" REQUIRED)
 
-project(EternalLegacy C CXX)
+project(Runtime C CXX)
 
-include("${VITASDK}/share/vita.cmake" REQUIRED)
-
-# Vita application configuration
-set(VITA_APP_NAME "EternalLegacy")
-set(VITA_TITLEID "ETERNAL00")
-set(VITA_VPKNAME "EternalLegacy")
-set(VITA_VERSION "01.00")
+# ==== Vita 应用信息（改这里）====
+set(VITA_APP_NAME "Eternal Legacy")
+set(VITA_TITLEID  "ETERNAL00")     # 9 位
+set(VITA_VPKNAME  "EternalLegacy")
+set(VITA_VERSION  "01.00")
 set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
 
-# Optional: used for "send" and "dump" targets
-set(PSVITAIP "192.168.0.198" CACHE STRING "PSVita IP (for FTP access)")
-set(PARSECOREPATH "$ENV{PARSECOREPATH}" CACHE STRING "vita-parse-core main.py")
+# Optional: used for "send" target
+set(PSVITAIP "192.168.1.100" CACHE STRING "PSVita IP (for FTP access)")
 
-# Game-specific definitions
+# ==== 游戏数据路径（改这里）====
 set(DATA_PATH "ux0:data/EternalLegacy/" CACHE STRING "Path to data (with trailing /)")
-set(SO_PATH "${DATA_PATH}libEternalLegacy.so" CACHE STRING "Path to .so")
+add_definitions(-DDATA_PATH="${DATA_PATH}" -DLOG_PATH="${LOG_PATH}")
 
-add_definitions(-DDATA_PATH="${DATA_PATH}" -DSO_PATH="${SO_PATH}")
-
-option(USE_SCELIBC_IO "Use SceLibcBridge for IO and some other std functions" OFF)
-if (USE_SCELIBC_IO)
-  add_definitions(-DUSE_SCELIBC_IO)
-endif()
-add_definitions(-DDEBUG_FILE)
-
-set(SHADER_FORMAT "CG" CACHE STRING "Preferred shader format (one of 'GLSL', 'CG', 'GXP')")
-if (${SHADER_FORMAT} STREQUAL "GLSL")
-  add_definitions(-DUSE_GLSL_SHADERS)
-elseif (${SHADER_FORMAT} STREQUAL "CG")
-  add_definitions(-DUSE_CG_SHADERS)
-elseif (${SHADER_FORMAT} STREQUAL "GXP")
-  add_definitions(-DUSE_GXP_SHADERS)
-else()
-  message(FATAL_ERROR "SHADER_FORMAT option can only be one of: 'GLSL', 'CG', 'GXP'")
-endif()
-
-set(valid_dump_formats GLSL CG)
-option(DUMP_COMPILED_SHADERS "When using GLSL or CG shader format, cache compiled shaders on disk" ON)
-if (DUMP_COMPILED_SHADERS)
-  if (SHADER_FORMAT IN_LIST valid_dump_formats)
-    add_definitions(-DDUMP_COMPILED_SHADERS)
-  else()
-    message(WARNING "DUMP_COMPILED_SHADERS has no effect for the chosen shader format ${SHADER_FORMAT}")
-  endif()
-endif()
-
-# Unique debug definition for loader's logging to not interfere with anything
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_definitions(-DDEBUG_SOLOADER)
-  # Uncomment this for verbose FalsoJNI logging:
-  #add_definitions(-DFALSOJNI_DEBUGLEVEL=0)
+endif ()
+
+option(DEBUG_LOGFILE "Also write loader logs to a file" OFF)
+if (DEBUG_LOGFILE)
+  set(LOG_PATH "${DATA_PATH}log.txt" CACHE STRING "Path to log.txt")
+  add_definitions(-DDEBUG_LOGFILE -DLOG_PATH="${LOG_PATH}")
+endif()
+
+option(DEBUG_OBSERVE "Enable verbose engine and GL tracing" OFF)
+if (DEBUG_OBSERVE)
+  add_definitions(-DDEBUG_OBSERVE)
 endif()
 
 # makes sincos, sincosf, etc. visible
 add_definitions(-D_GNU_SOURCE -D__POSIX_VISIBLE=999999)
 
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -O3 -g -ffast-math -mfloat-abi=softfp -Wno-deprecated")
-set(CMAKE_CXX_FLAGS "${CMAKE_C_FLAGS} -std=gnu++20 -Wno-write-strings -Wno-psabi")
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -mfloat-abi=softfp -std=gnu11 -Wno-deprecated")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,-q -mfloat-abi=softfp -std=gnu++20 -Wno-write-strings -Wno-psabi")
+
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O1 -g3")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -g3")
+else ()
+  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -g0 -ffast-math")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g0 -ffast-math")
+endif ()
+
+enable_language(ASM)
+
+# ==== 框架（必需）====
+file(GLOB_RECURSE SO_COMMON_SRC vendor/so_common/*.c)
+file(GLOB_RECURSE SO_LINKER_SRC vendor/so_linker/*.c)
+file(GLOB_RECURSE SO_JAVA_SRC   vendor/so_java/*.c vendor/so_java/*.cpp)
+file(GLOB_RECURSE SO_JNI_SRC    vendor/so_jni/*.c vendor/so_jni/*.S)
+
+# ==== 虚拟库 ====
+file(GLOB_RECURSE SO_LIBLOG_SRC           vendor/so_libs/liblog/*.c)
+file(GLOB_RECURSE SO_LIBZ_SRC             vendor/so_libs/libz/*.c)
+file(GLOB_RECURSE SO_LIBM_SRC             vendor/so_libs/libm/*.c)
+file(GLOB_RECURSE SO_LIBDL_SRC            vendor/so_libs/libdl/*.c)
+file(GLOB_RECURSE SO_LIBEGL_SRC           vendor/so_libs/libEGL/*.c)
+file(GLOB_RECURSE SO_LIBGLESV1_SRC        vendor/so_libs/libGLESv1_CM/*.c)
+file(GLOB_RECURSE SO_LIBGLESV2_SRC        vendor/so_libs/libGLESv2/*.c)
+file(GLOB_RECURSE SO_LIBANDROID_SRC       vendor/so_libs/libandroid/*.c)
+file(GLOB_RECURSE SO_LIBCUTILS_SRC        vendor/so_libs/libcutils/*.c)
+file(GLOB_RECURSE SO_LIBUTILS_SRC         vendor/so_libs/libutils/*.c)
+file(GLOB_RECURSE SO_LIBC_SRC             vendor/so_libs/libc/*.c)
+file(GLOB_RECURSE SO_LIBSTDCXX_SRC        vendor/so_libs/libstdcxx/*.c)
+
+# ==== 项目代码：source/* ====
+file(GLOB_RECURSE SOURCE_SRC source/*.c)
 
 add_executable(${CMAKE_PROJECT_NAME}
-               source/main.c
-               source/dynlib.c
-               source/java.c
-               source/patch.c
-               source/reimpl/bits/_ctype.c
-               source/reimpl/egl.c
-               source/reimpl/errno.c
-               source/reimpl/io.c
-               source/reimpl/log.c
-               source/reimpl/mem.c
-               source/reimpl/pthr.c
-               source/reimpl/sys.c
-               source/reimpl/time64.c
-               source/reimpl/controls.c
-               source/reimpl/asset_manager.cpp
-               source/utils/dialog.c
-               source/utils/glutil.c
-               source/utils/init.c
-               source/utils/logger.c
-               source/utils/settings.c
-               source/utils/utils.c
-               lib/falso_jni/FalsoJNI.c
-               lib/falso_jni/FalsoJNI_ImplBridge.c
-               lib/falso_jni/FalsoJNI_Logger.c
-               lib/sha1/sha1.c
-               lib/fios/fios.c
-               lib/so_util/so_util.c)
+  ${SO_COMMON_SRC}
+  ${SO_LINKER_SRC}
+  ${SO_JAVA_SRC}
+  ${SO_JNI_SRC}
 
-add_subdirectory(lib/libc_bridge)
-add_dependencies(${CMAKE_PROJECT_NAME} SceLibcBridge)
+  ${SO_LIBLOG_SRC}
+  ${SO_LIBZ_SRC}
+  ${SO_LIBM_SRC}
+  ${SO_LIBDL_SRC}
+  ${SO_LIBEGL_SRC}
+  ${SO_LIBGLESV1_SRC}
+  ${SO_LIBGLESV2_SRC}
+  ${SO_LIBANDROID_SRC}
+  ${SO_LIBCUTILS_SRC}
+  ${SO_LIBUTILS_SRC}
+  ${SO_LIBC_SRC}
+  ${SO_LIBSTDCXX_SRC}
+
+  ${SOURCE_SRC}
+)
 
 target_include_directories(${CMAKE_PROJECT_NAME} SYSTEM
-                           PUBLIC ${CMAKE_SOURCE_DIR}/lib
-                           )
+  PUBLIC ${CMAKE_SOURCE_DIR}/libs/include
+  PUBLIC ${CMAKE_SOURCE_DIR}/libs/include/freetype2
+  PUBLIC ${CMAKE_SOURCE_DIR}/vendor
+  PUBLIC ${CMAKE_SOURCE_DIR}/vendor/so_libs
+  PUBLIC ${CMAKE_SOURCE_DIR}/extras
+)
 
 target_include_directories(${CMAKE_PROJECT_NAME}
-                           PUBLIC ${CMAKE_SOURCE_DIR}/source
-                           )
+  PUBLIC ${CMAKE_SOURCE_DIR}/source
+)
+
+target_link_directories(${CMAKE_PROJECT_NAME}
+  PUBLIC ${CMAKE_SOURCE_DIR}/libs/lib
+)
+
+# Keep pthread-embedded's key/destructor handling and replace its Vita TLS storage.
+target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+  -Wl,--wrap=pte_osTlsAlloc
+  -Wl,--wrap=pte_osTlsFree
+  -Wl,--wrap=pte_osTlsGetValue
+  -Wl,--wrap=pte_osTlsSetValue
+)
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
-                      -Wl,--whole-archive pthread -Wl,--no-whole-archive
-                      stdc++
-                      vitaGL
-                      vitashark
-                      SceShaccCgExt
-                      taihen_stub
-                      SceShaccCg_stub
-                      z
-                      m
-                      png16
-                      ScePgf_stub
-                      mathneon
-                      kubridge_stub
-                      ${CMAKE_BINARY_DIR}/lib/libc_bridge/stubs/libSceLibcBridge_stub.a
-                      SceHid_stub
-                      SceTouch_stub
-                      SceMotion_stub
-                      SceAppMgr_stub
-                      SceAppUtil_stub
-                      SceAudio_stub
-                      SceAudioIn_stub
-                      SceCommonDialog_stub
-                      SceDisplay_stub
-                      SceKernelDmacMgr_stub
-                      SceFios2_stub
-                      SceCtrl_stub
-                      SceGxm_stub
-                      ScePower_stub
-                      SceTouch_stub
-                      SceVshBridge_stub
-                      )
+  -Wl,--whole-archive pthread -Wl,--no-whole-archive
+  vitaGL
+  vitashark
+  SceShaccCgExt
+  taihen_stub
+  SceShaccCg_stub
+  kubridge_stub
+  mathneon
+  speexdsp
+  sqlite3
+  freetype
+  png
+  bz2
+  z
+  m
+  stdc++
+  SceHid_stub
+  SceCtrl_stub
+  SceTouch_stub
+  SceMotion_stub
+  SceAppMgr_stub
+  SceAppUtil_stub
+  SceAudio_stub
+  SceAudioIn_stub
+  SceCommonDialog_stub
+  SceDisplay_stub
+  SceKernelDmacMgr_stub
+  SceGxm_stub
+  ScePower_stub
+  SceVshBridge_stub
+  SceAvPlayer_stub
+)
 
 vita_create_self(eboot.bin ${CMAKE_PROJECT_NAME} UNSAFE NOASLR)
 vita_create_vpk(${VITA_VPKNAME}.vpk ${VITA_TITLEID} eboot.bin
-                VERSION ${VITA_VERSION}
-                NAME ${VITA_APP_NAME}
-                FILE ${CMAKE_SOURCE_DIR}/extras/cpuinfo cpuinfo
-                ${CMAKE_SOURCE_DIR}/extras/meminfo meminfo
-                ${CMAKE_SOURCE_DIR}/extras/livearea/icon0.png sce_sys/icon0.png
-                ${CMAKE_SOURCE_DIR}/extras/livearea/pic0.png sce_sys/pic0.png
-                ${CMAKE_SOURCE_DIR}/extras/livearea/startup.png sce_sys/livearea/contents/startup.png
-                ${CMAKE_SOURCE_DIR}/extras/livearea/bg0.png sce_sys/livearea/contents/bg0.png
-                ${CMAKE_SOURCE_DIR}/extras/livearea/template.xml sce_sys/livearea/contents/template.xml
-                )
+  VERSION ${VITA_VERSION}
+  NAME ${VITA_APP_NAME}
+  # 根目录这三个对应 libc 对 Android 的模拟：/proc/cpuinfo、/proc/meminfo、/dev/urandom
+  FILE ${CMAKE_SOURCE_DIR}/resources/cpuinfo    cpuinfo
+  FILE ${CMAKE_SOURCE_DIR}/resources/meminfo    meminfo
+  FILE ${CMAKE_SOURCE_DIR}/resources/urandom    urandom
+  # 气泡图标与 LiveArea
+  FILE ${CMAKE_SOURCE_DIR}/resources/livearea/icon0.png     sce_sys/icon0.png
+  FILE ${CMAKE_SOURCE_DIR}/resources/livearea/pic0.png      sce_sys/pic0.png
+  FILE ${CMAKE_SOURCE_DIR}/resources/livearea/startup.png   sce_sys/livearea/contents/startup.png
+  FILE ${CMAKE_SOURCE_DIR}/resources/livearea/bg0.png       sce_sys/livearea/contents/bg0.png
+  FILE ${CMAKE_SOURCE_DIR}/resources/livearea/template.xml  sce_sys/livearea/contents/template.xml
+)
 
 add_custom_target(send
-                  COMMAND echo destroy | nc ${PSVITAIP} 1338
-                  COMMAND echo destroy | nc ${PSVITAIP} 1338
-                  COMMAND curl -T eboot.bin ftp://${PSVITAIP}:1337/ux0:/app/${VITA_TITLEID}/
-                  COMMAND echo launch ${VITA_TITLEID} | nc ${PSVITAIP} 1338
-                  DEPENDS ${VITA_VPKNAME}.vpk-vpk
-                  )
-
-add_custom_target(send_kvdb
-                  COMMAND echo destroy | nc ${PSVITAIP} 1338
-                  COMMAND curl -T eboot.bin ftp://${PSVITAIP}:1337/ux0:/app/${VITA_TITLEID}/
-                  COMMAND echo launch ux0:/app/${VITA_TITLEID}/eboot.bin | nc ${PSVITAIP} 1338
-                  DEPENDS ${VITA_VPKNAME}.vpk-vpk
-                  )
-
-add_custom_target(dump
-                  COMMAND ${CMAKE_SOURCE_DIR}/extras/scripts/get_dump.sh ${PSVITAIP}
-                  COMMAND python3 ${PARSECOREPATH} coredump ${CMAKE_PROJECT_NAME}
-                  )
-
-add_custom_target(reboot
-                  COMMAND echo reboot | nc ${PSVITAIP} 1338
-                  )
+  COMMAND echo destroy | nc ${PSVITAIP} 1338
+  COMMAND echo destroy | nc ${PSVITAIP} 1338
+  COMMAND curl -T eboot.bin ftp://${PSVITAIP}:1337/ux0:/app/${VITA_TITLEID}/
+  COMMAND echo launch ${VITA_TITLEID} | nc ${PSVITAIP} 1338
+  DEPENDS ${VITA_VPKNAME}.vpk-vpk
+)
