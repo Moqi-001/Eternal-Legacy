@@ -72,13 +72,12 @@ cmake .. && make -j
 
 - Intro mp4 is not played yet: when the engine asks for the video it is reported as
   already finished, so the game skips straight to the loading screen.
-- `libStormGLOFT.so` is not loaded (it is a GL hooking library added by whoever repackaged
-  the APK, not part of the original engine).
 
 ## Authors
 
-- yizhigai
+- Moqi01
 - Lisen
+- yizhigai
 
 ## Credits
 

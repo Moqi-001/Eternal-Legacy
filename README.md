@@ -68,12 +68,12 @@ cmake .. && make -j
 ## 已知限制
 
 - 开场 mp4 暂未播放：引擎请求视频时直接按“已播完”上报，跳过动画进入加载画面。
-- 不加载 `libStormGLOFT.so`（改包方加入的 GL 钩子库，与原版引擎无关）。
 
 ## 作者
 
-- yizhigai
+- Moqi01
 - Lisen
+- yizhigai
 
 ## 致谢
 
