@@ -14,6 +14,7 @@
 #include "GameGLSurfaceView.h"
 #include "GLMediaPlayer.h"
 #include "utils/paths.h"
+#include "utils/utils.h"
 #include "video_player.h"
 
 /*
@@ -44,8 +45,6 @@ static JInt GLMediaPlayer_Get_PhoneManufacturer(void) {
 }
 
 static JInt GLMediaPlayer_Get_logoVideoState(void) {
-    so_loga("[GLMediaPlayer]: Get_logoVideoState: is_playing=%d", video_is_playing());
-
     if (sLogoVideoDone) {
         return 2;  // 播完是终态，一直回 2
     }
@@ -99,21 +98,27 @@ static JInt GLMediaPlayer_loadMovie(JString name) {
     char        buf[PATH_MAPPED_MAX];
     char        android_path[PATH_MAPPED_MAX];
     const char *movie = String_getUTFChars(name);
+    const char *path;
 
-    snprintf(android_path, sizeof(android_path), "/sdcard/gameloft/games/GloftELHP/%s", movie);
-    const char *path = paths_from_android(android_path, buf, sizeof(buf));
+    snprintf(buf, sizeof(buf), "app0:video/%s", movie);  // 默认视频vita的avplayer无法播放，转到app0:下的自转码视频
+    if (file_exists(buf)) {
+        path = buf;
+    } else {
+        snprintf(android_path, sizeof(android_path), "/sdcard/gameloft/games/GloftELHP/%s", movie);
+        path = paths_from_android(android_path, buf, sizeof(buf));
+    }
 
     sLogoVideoStarted = 1;
     sLogoVideoSeen    = 0;
     sLogoVideoDone    = 0;
 
     if (video_open(path, 1.0f) == 0 && video_play() == 0) {
-        so_loga("[JAVA] GLMediaPlayer.loadMovie(%s): 播放 %s", movie, path);
+        so_logd("[GLMediaPlayer] loadMovie(%s) -> %s", movie, path);
         return 1;
     }
 
     // 解码器打不开（编码不支持等）：按“播完”上报，游戏继续往下走
-    so_loga("[JAVA] GLMediaPlayer.loadMovie(%s): 播放不了，跳过", movie);
+    so_loge("[GLMediaPlayer] loadMovie(%s): error!", movie);
     video_close();
     return 1;
 }

@@ -23,8 +23,9 @@
 #include <so_common/so_logger.h>
 #include <vitaGL.h>
 
-#include "loader.h"
 #include "video_player.h"
+
+#include "loader.h"
 
 #define MAX_AUDIO_VOLUME    32767
 #define NUM_VIDEO_BUFFERS   2
@@ -32,7 +33,7 @@
 #define ALIGN_MEM(x, align) (((x) + ((align) - 1)) & ~((align) - 1))
 
 enum {
-    PLAYER_STOPPED = 0,
+    PLAYER_STOPPED = 1,
     PLAYER_PAUSED,
     PLAYER_PLAYING,
 };
@@ -40,14 +41,13 @@ enum {
 static volatile int      player_state  = PLAYER_STOPPED;
 static SceAvPlayerHandle player_handle = 0;
 
-// 引擎线程（loadMovie/状态查询）和宿主渲染线程、音频线程都会碰播放器句柄，
-// 句柄的读写统一在这把锁里做；等音频线程退出时不能持锁
 static pthread_mutex_t player_mutex                    = PTHREAD_MUTEX_INITIALIZER;
 static SceUID          audio_thid                      = -1;
 static int             audio_volume                    = MAX_AUDIO_VOLUME;
 static GLuint          gl_textures[NUM_VIDEO_BUFFERS]  = {0};
 static SceGxmTexture  *gxm_textures[NUM_VIDEO_BUFFERS] = {0};
 static int             frame_idx                       = 0;
+static GLuint          prev_tex                        = 0;
 static GLuint          movie_fs                        = GL_NONE;
 static GLuint          movie_vs                        = GL_NONE;
 static GLuint          movie_prog                      = GL_NONE;
@@ -94,7 +94,7 @@ static void *gpu_alloc(void *p, uint32_t align, uint32_t size) {
     }
     size = ALIGN_MEM(size, align);
 
-    SceUID blk = sceKernelAllocMemBlock("av_block", SCE_KERNEL_MEMBLOCK_TYPE_USER_MAIN_PHYCONT_NC_RW, size, NULL);
+    SceUID blk = sceKernelAllocMemBlock("av_block", SCE_KERNEL_MEMBLOCK_TYPE_USER_CDRAM_RW, size, NULL);
     if (blk < 0) {
         return NULL;
     }
@@ -146,23 +146,12 @@ static int audio_thread(SceSize args, void *argp) {
     return sceKernelExitDeleteThread(0);
 }
 
-/*
- * 解码器事件：READY / 错误 / 结束都从这里报上来。
- * 我们用 autoStart 起播，起播状态只能靠它确认。
- */
-static void player_event(void *unused, int32_t event, int32_t source, void *data) {
-    (void)unused;
-    (void)data;
-
-    so_logd("[VIDEO] event=%d source=%d", (int)event, (int)source);
-}
-
 int video_open(const char *filepath, float volume) {
     if (player_handle) {
         video_close();
     }
 
-    if (sceSysmoduleIsLoaded(SCE_SYSMODULE_AVPLAYER) < 0 && !IsRunningInVita3K()) {
+    if (sceSysmoduleIsLoaded(SCE_SYSMODULE_AVPLAYER) < 0) {
         sceSysmoduleLoadModule(SCE_SYSMODULE_AVPLAYER);
     }
 
@@ -179,7 +168,6 @@ int video_open(const char *filepath, float volume) {
     init_data.basePriority                        = 0xA0;
     init_data.numOutputVideoFrameBuffers          = 3;
     init_data.autoStart                           = 1;
-    init_data.eventReplacement.eventCallback      = player_event;
     // init_data.debugLevel                          = 3;
 
     player_handle = sceAvPlayerInit(&init_data);
@@ -220,8 +208,6 @@ int video_open(const char *filepath, float volume) {
 
     player_state = PLAYER_PAUSED;
 
-    pthread_mutex_init(&player_mutex, NULL);
-
     audio_thid = sceKernelCreateThread("audio_thread", audio_thread, 0x10000100, 0x10000, 0, 0, NULL);
     if (audio_thid < 0) {
         video_close();
@@ -246,16 +232,15 @@ void video_close() {
 
     so_logd("[VIDEO] video_close()");
 
-    // 先置状态再放锁：音频线程每轮都要拿这把锁才能看到 STOPPED 退出，
-    // 持锁等它结束会互相卡死
     pthread_mutex_lock(&player_mutex);
     player_state = PLAYER_STOPPED;
+    prev_tex     = 0;
 
     if (audio_thid >= 0) {
         pthread_mutex_unlock(&player_mutex);
 
         sceKernelWaitThreadEnd(audio_thid, NULL, NULL);
-        // sceKernelDeleteThread(audio_thid);
+        sceKernelDeleteThread(audio_thid);
         audio_thid = -1;
 
         pthread_mutex_lock(&player_mutex);
@@ -277,35 +262,68 @@ void video_close() {
     player_handle = 0;
 
     pthread_mutex_unlock(&player_mutex);
-    pthread_mutex_destroy(&player_mutex);
+}
+
+static void draw_movie_quad(GLuint texture) {
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(movie_prog);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, texture);
+
+    // 保存属性数组
+    GLint saved_array_buf = 0, saved_elem_buf = 0;
+    glGetIntegerv(GL_ARRAY_BUFFER_BINDING, &saved_array_buf);
+    glGetIntegerv(GL_ELEMENT_ARRAY_BUFFER_BINDING, &saved_elem_buf);
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
+    glEnableVertexAttribArray(0);
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, &movie_vertices[0]);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, &movie_texcoords[0]);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindBuffer(GL_ARRAY_BUFFER, saved_array_buf);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, saved_elem_buf);
+
+    // 恢复属性数组
+    glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(1);
+    glBindTexture(GL_TEXTURE_2D, 0);
+    glUseProgram(0);
 }
 
 int video_draw() {
     if (!player_handle) {
-        return -1;
-    }
-
-    SceAvPlayerFrameInfo frame;
-
-    pthread_mutex_lock(&player_mutex);
-    if (!player_handle || player_state != PLAYER_PLAYING) {
-        so_logd("[VIDEO] video_draw() not ready");
-        pthread_mutex_unlock(&player_mutex);
         return 0;
     }
 
+    SceAvPlayerFrameInfo frame;
+    pthread_mutex_lock(&player_mutex);
+
     if (!sceAvPlayerIsActive(player_handle)) {
-        so_logd("[VIDEO] video_draw() not ctive");
+        so_loge("[VIDEO] video_draw() not active");
         player_state = PLAYER_STOPPED;
         pthread_mutex_unlock(&player_mutex);
         return 0;
     }
 
-    if (!sceAvPlayerGetVideoData(player_handle, &frame)) {
-        so_logd("[VIDEO] video_draw() no video data");
+    if (player_state != PLAYER_PLAYING) {
         pthread_mutex_unlock(&player_mutex);
         return 0;
     }
+
+    if (!sceAvPlayerGetVideoData(player_handle, &frame)) {
+        pthread_mutex_unlock(&player_mutex);
+
+        // 无新帧时重画上一帧，无旧帧则清屏
+        if (prev_tex) {
+            draw_movie_quad(prev_tex);
+        } else {
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        }
+        return 1;
+    }
+
+    pthread_mutex_unlock(&player_mutex);
 
     sceGxmTextureInitLinear(
         gxm_textures[frame_idx],
@@ -317,22 +335,11 @@ int video_draw() {
     sceGxmTextureSetMinFilter(gxm_textures[frame_idx], SCE_GXM_TEXTURE_FILTER_LINEAR);
     sceGxmTextureSetMagFilter(gxm_textures[frame_idx], SCE_GXM_TEXTURE_FILTER_LINEAR);
 
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glUseProgram(movie_prog);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, gl_textures[frame_idx]);
-    glBindBuffer(GL_ARRAY_BUFFER, 0);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, &movie_vertices[0]);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 0, &movie_texcoords[0]);
-    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
-    glUseProgram(0);
-
+    GLuint frame_tex = gl_textures[frame_idx];
+    draw_movie_quad(frame_tex);
+    prev_tex  = frame_tex;
     frame_idx = (frame_idx + 1) % NUM_VIDEO_BUFFERS;
 
-    pthread_mutex_unlock(&player_mutex);
     return 1;
 }
 

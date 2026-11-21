@@ -1,11 +1,3 @@
-#
-# so_loader 模板工程的构建脚本
-#
-# vendor/ 是加载器源码，source/ 是移植者要改的代码，
-# libs/ 是预编译库，resources/ 是随包分发的资源。
-# 用法：把整个仓库复制成 <游戏名>/，然后只改 source/ 和下面标了「改这里」的几项。
-# 详细说明见 docs/PORTING.md。
-#
 cmake_minimum_required(VERSION 3.14)
 
 if (NOT DEFINED ENV{VITASDK} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
@@ -173,6 +165,8 @@ vita_create_vpk(${VITA_VPKNAME}.vpk ${VITA_TITLEID} eboot.bin
   FILE ${CMAKE_SOURCE_DIR}/resources/cpuinfo    cpuinfo
   FILE ${CMAKE_SOURCE_DIR}/resources/meminfo    meminfo
   FILE ${CMAKE_SOURCE_DIR}/resources/urandom    urandom
+  # 开场视频：apk 里是 mp4v（Vita 解码器不支持），随包带一份转好的 H.264
+  FILE ${CMAKE_SOURCE_DIR}/resources/LOGO_Gameloft_960x640.mp4   video/LOGO_Gameloft_960x640.mp4
   # 气泡图标与 LiveArea
   FILE ${CMAKE_SOURCE_DIR}/resources/livearea/icon0.png     sce_sys/icon0.png
   FILE ${CMAKE_SOURCE_DIR}/resources/livearea/pic0.png      sce_sys/pic0.png
