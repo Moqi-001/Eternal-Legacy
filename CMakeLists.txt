@@ -21,7 +21,7 @@ project(Runtime C CXX)
 set(VITA_APP_NAME "Eternal Legacy")
 set(VITA_TITLEID  "ETERNAL00")     # 9 位
 set(VITA_VPKNAME  "EternalLegacy")
-set(VITA_VERSION  "01.00")
+set(VITA_VERSION  "01.03")
 set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
 
 # Optional: used for "send" target
@@ -29,22 +29,29 @@ set(PSVITAIP "192.168.1.100" CACHE STRING "PSVita IP (for FTP access)")
 
 # ==== 游戏数据路径（改这里）====
 set(DATA_PATH "ux0:data/EternalLegacy/" CACHE STRING "Path to data (with trailing /)")
-add_definitions(-DDATA_PATH="${DATA_PATH}" -DLOG_PATH="${LOG_PATH}")
+add_definitions(-DDATA_PATH="${DATA_PATH}")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
   add_definitions(-DDEBUG_SOLOADER)
 endif ()
 
-option(DEBUG_LOGFILE "Also write loader logs to a file" OFF)
 if (DEBUG_LOGFILE)
-  set(LOG_PATH "${DATA_PATH}log.txt" CACHE STRING "Path to log.txt")
-  add_definitions(-DDEBUG_LOGFILE -DLOG_PATH="${LOG_PATH}")
-endif()
+  message(FATAL_ERROR "This port uses console-only logging. Set DEBUG_LOGFILE=OFF.")
+endif ()
 
-option(DEBUG_OBSERVE "Enable verbose engine and GL tracing" OFF)
-if (DEBUG_OBSERVE)
-  add_definitions(-DDEBUG_OBSERVE)
-endif()
+option(PERF_DIAGNOSTICS "Print aggregated performance counters to sceClibPrintf" ON)
+add_compile_definitions(PERF_DIAGNOSTICS=$<BOOL:${PERF_DIAGNOSTICS}>)
+set(VITA_MSAA "0" CACHE STRING "MSAA samples: 0, 2 or 4")
+if (NOT VITA_MSAA MATCHES "^(0|2|4)$")
+  message(FATAL_ERROR "VITA_MSAA must be 0, 2 or 4")
+endif ()
+add_compile_definitions(VITA_MSAA=${VITA_MSAA})
+# Persistent shader data is valid only for this exact driver/compiler ABI.
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+  "${CMAKE_SOURCE_DIR}/libs/lib/libvitaGL.a" "${CMAKE_SOURCE_DIR}/libs/lib/libvitashark.a")
+file(SHA256 "${CMAKE_SOURCE_DIR}/libs/lib/libvitaGL.a" ETERNAL_VGL_SHA)
+file(SHA256 "${CMAKE_SOURCE_DIR}/libs/lib/libvitashark.a" ETERNAL_SHARK_SHA)
+add_compile_definitions(ETERNAL_SHADER_CACHE_ABI="stage-gxp-v3-${ETERNAL_VGL_SHA}-${ETERNAL_SHARK_SHA}-msaa${VITA_MSAA}")
 
 # makes sincos, sincosf, etc. visible
 add_definitions(-D_GNU_SOURCE -D__POSIX_VISIBLE=999999)
@@ -53,8 +60,8 @@ set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wl,-q -mfloat-abi=softfp -std=gnu11 -Wno-de
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wl,-q -mfloat-abi=softfp -std=gnu++20 -Wno-write-strings -Wno-psabi")
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O1 -g3")
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O1 -g3")
+  set(CMAKE_C_FLAGS_DEBUG "-O1 -g3")
+  set(CMAKE_CXX_FLAGS_DEBUG "-O1 -g3")
 else ()
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -O3 -g0 -ffast-math")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -g0 -ffast-math")
@@ -64,6 +71,8 @@ enable_language(ASM)
 
 # ==== 框架（必需）====
 file(GLOB_RECURSE SO_COMMON_SRC vendor/so_common/*.c)
+# Keep shared vendor sources unchanged; source/utils/logger.c supplies the console logger.
+list(FILTER SO_COMMON_SRC EXCLUDE REGEX "/so_logger\\.c$")
 file(GLOB_RECURSE SO_LINKER_SRC vendor/so_linker/*.c)
 file(GLOB_RECURSE SO_JAVA_SRC   vendor/so_java/*.c vendor/so_java/*.cpp)
 file(GLOB_RECURSE SO_JNI_SRC    vendor/so_jni/*.c vendor/so_jni/*.S)
@@ -129,7 +138,20 @@ target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
   -Wl,--wrap=pte_osTlsFree
   -Wl,--wrap=pte_osTlsGetValue
   -Wl,--wrap=pte_osTlsSetValue
+  # SDK findfp.o inlines empty locks inside __sfp/__sinit. Protect both entry
+  # points plus release hooks used by fclose/freopen and failed opens.
+  -Wl,--wrap=__sfp -Wl,--wrap=__sinit
+  -Wl,--wrap=__sfp_lock_acquire -Wl,--wrap=__sfp_lock_release
+  -Wl,--wrap=__sinit_lock_acquire -Wl,--wrap=__sinit_lock_release
 )
+
+if (PERF_DIAGNOSTICS)
+  target_link_options(${CMAKE_PROJECT_NAME} PRIVATE
+    -Wl,--wrap=sceIoOpen -Wl,--wrap=sceIoClose
+    -Wl,--wrap=sceIoGetstat -Wl,--wrap=sceIoRead
+    -Wl,--wrap=sceIoPread -Wl,--wrap=sceIoLseek -Wl,--wrap=sceIoLseek32
+  )
+endif ()
 
 target_link_libraries(${CMAKE_PROJECT_NAME}
   -Wl,--whole-archive pthread -Wl,--no-whole-archive

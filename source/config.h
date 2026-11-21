@@ -3,6 +3,8 @@
 
 #define SCREEN_W 960
 #define SCREEN_H 544
+#define GAME_LOGICAL_W 960
+#define GAME_LOGICAL_H 640
 
 // 渲染线程栈：引擎在 nativeInit 里要用到 256 KB 以上的栈（ALicenseCheck::LoadConfig），
 // 安卓上这段跑在 GL 线程（默认 1 MB）

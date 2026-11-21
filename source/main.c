@@ -33,10 +33,6 @@ int main(int argc, char *argv[]) {
     scePowerSetGpuClockFrequency(222);
     scePowerSetGpuXbarClockFrequency(166);
 
-#ifdef LOG_PATH
-    sceIoRemove(LOG_PATH);
-#endif
-
     soloader_init();
     soloader_run();
     soloader_term();

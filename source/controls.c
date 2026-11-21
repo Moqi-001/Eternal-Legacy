@@ -1,12 +1,12 @@
 /*
- * 输入：实体按键/摇杆 → 合成触摸，触摸屏 → 直接透传
+ * 输入：实体按键/摇杆 → 逻辑 UI 触摸，触摸屏 → 内容区逆变换
  *
  * 这个游戏的安卓端不做实体按键处理：nativeKeyDown 一路走到 appKeyPressed，
  * 里面只有一条日志（KeyPressed in App.cpp）。真正的操作都在触摸界面上——
  * 左下虚拟摇杆、右下动作键、右上暂停键。所以这里照 bio4 的做法，把按键换算成
  * 对应屏幕坐标的触摸事件（onTouch 的 type：0 抬起 / 1 按下 / 2 移动）。
  *
- * 坐标以 960x544 的绘制区为基准，改键位只需要动下面几张表。
+ * 合成触摸直接使用 960x640 逻辑 UI 坐标，不再经过物理屏幕逆变换。
  */
 #include <psp2/ctrl.h>
 #include <psp2/touch.h>
@@ -17,15 +17,16 @@
 #include "controls.h"
 #include "java/EternalLegacy.h"
 #include "java/GameGLSurfaceView.h"
+#include "patch/presentation.h"
 
 // 触摸点编号：0 留给真实触摸屏，虚拟摇杆和虚拟按键各占一个
 #define TOUCH_ID_SCREEN 0
 #define TOUCH_ID_STICK  1
 
-// 左下虚拟摇杆（中心与最大偏移，单位是绘制区像素）
+// 480x320 SWF 舞台的逻辑 UI：中心 (71,250)，半径 32，按 2 倍输出。
 #define VSTICK_CENTER_X 142
-#define VSTICK_CENTER_Y 425
-#define VSTICK_RADIUS   55
+#define VSTICK_CENTER_Y 500
+#define VSTICK_RADIUS   64
 
 // 摇杆死区（SCE_CTRL_MODE_ANALOG_WIDE 下 0..255，中心 128）
 #define VSTICK_DEADZONE 32
@@ -38,10 +39,11 @@ typedef struct {
     int          down;
 } ButtonTouch;
 
-// 屏幕按钮坐标：右上暂停、右下交互/动作
+// 960x640 UI 上的相对位置延续原表：暂停 (96.35%,7.35%)、动作 (89.06%,83.64%)。
+// 这是逻辑 UI 的命中点，不是旧物理屏幕坐标的逆变换。
 static ButtonTouch s_buttons[] = {
-    { SCE_CTRL_START, 925, 40,  2, 0 },
-    { SCE_CTRL_CROSS, 855, 455, 3, 0 },
+    { SCE_CTRL_START, 925, 47,  2, 0 },
+    { SCE_CTRL_CROSS, 855, 535, 3, 0 },
 };
 
 // Java 侧只对返回/菜单键查状态，其余键码引擎不处理（只打日志）
@@ -59,6 +61,8 @@ static const ButtonMap s_key_map[] = {
 static unsigned int s_prev_buttons = 0;
 
 static int s_touch_active = 0;
+// A contact that begins/leaves in a black bar stays rejected until finger-up.
+static int s_touch_tracking = 0;
 static int s_touch_x      = 0;
 static int s_touch_y      = 0;
 
@@ -70,7 +74,7 @@ static void send_touch(int type, int x, int y, int touch_id) {
     GameGLSurfaceView_onTouch(type, x, y, touch_id);
 }
 
-// 真实触摸屏：前面板坐标是 1920x1088，缩到绘制区
+// 前面板 1920x1088 -> 物理像素 -> 960x640 逻辑内容区。
 static void controls_poll_touchscreen(void) {
     SceTouchData touch;
     if (sceTouchPeek(SCE_TOUCH_PORT_FRONT, &touch, 1) < 0) {
@@ -78,21 +82,35 @@ static void controls_poll_touchscreen(void) {
     }
 
     if (touch.reportNum > 0) {
-        int x = touch.report[0].x / 2;
-        int y = touch.report[0].y / 2;
+        int x, y;
+        int inside = presentation_map_touch(touch.report[0].x / 2,
+                                            touch.report[0].y / 2, &x, &y);
 
-        if (!s_touch_active) {
+        if (!s_touch_tracking) {
+            s_touch_tracking = 1;
+            if (!inside) {
+                return;
+            }
             send_touch(1, x, y, TOUCH_ID_SCREEN);
             s_touch_active = 1;
+        } else if (!s_touch_active) {
+            return;
+        } else if (!inside) {
+            send_touch(0, s_touch_x, s_touch_y, TOUCH_ID_SCREEN);
+            s_touch_active = 0;
+            return;
         } else if (x != s_touch_x || y != s_touch_y) {
             send_touch(2, x, y, TOUCH_ID_SCREEN);
         }
 
         s_touch_x = x;
         s_touch_y = y;
-    } else if (s_touch_active) {
-        send_touch(0, s_touch_x, s_touch_y, TOUCH_ID_SCREEN);
+    } else {
+        if (s_touch_active) {
+            send_touch(0, s_touch_x, s_touch_y, TOUCH_ID_SCREEN);
+        }
         s_touch_active = 0;
+        s_touch_tracking = 0;
     }
 }
 
@@ -194,6 +212,7 @@ int controls_create(void) {
 
     s_prev_buttons = 0;
     s_touch_active = 0;
+    s_touch_tracking = 0;
     s_stick_active = 0;
 
     for (unsigned int i = 0; i < sizeof(s_buttons) / sizeof(s_buttons[0]); i++) {

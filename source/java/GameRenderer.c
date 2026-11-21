@@ -13,6 +13,7 @@
 #include "GLMediaPlayer.h"
 #include "GLResLoader.h"
 #include "GameRenderer.h"
+#include "config.h"
 
 struct _GameRenderer {
     JInt placeholder;
@@ -91,6 +92,8 @@ void GameRenderer_onSurfaceCreated(void) {
 }
 
 void GameRenderer_onSurfaceChanged(int width, int height) {
+    width = GAME_LOGICAL_W;
+    height = GAME_LOGICAL_H;
     so_logi("[JAVA] GameRenderer.onSurfaceChanged(%d, %d)", width, height);
     GameRenderer_nativeResize(width, height);
 }

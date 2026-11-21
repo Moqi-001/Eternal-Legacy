@@ -18,6 +18,14 @@
 #include "patch.h"
 #include "utils/dialog.h"
 #include "utils/utils.h"
+#include "utils/perf.h"
+#include "java/GLResLoader.h"
+#include "patch/presentation.h"
+#include "patch/font_cache.h"
+#include "patch/pack_cache.h"
+#include "patch/shader_cache.h"
+#include "utils/native_io.h"
+#include "utils/io_trace.h"
 
 extern so_library liblog_so;
 extern so_library libz_so;
@@ -72,10 +80,20 @@ static int soloader_init_opengl() {
         params.cdram_threshold   = VITAGL_CDRAM_THRESHOLD_MB * 1024 * 1024;
         params.phycont_threshold = VITAGL_PHYCONT_THRESHOLD_MB * 1024 * 1024;
         params.cdlg_threshold    = VITAGL_CDIALOG_THRESHOLD_MB * 1024 * 1024;
-        params.msaa              = VGL_MSAA_4X;
+        params.msaa              = VITA_MSAA == 4 ? VGL_MSAA_4X : VITA_MSAA == 2 ? VGL_MSAA_2X : VGL_MSAA_NONE;
         params.legacy_pool_size  = 0x100000;  // 开场视频用固定管线画，需要顶点池
-        vglInit(&params);
+        if (!vglInit(&params)) so_logf("[LOADER] vitaGL initialization failed");
+        if (presentation_gl_init() < 0) so_logf("[LOADER] presentation initialization failed");
+        shader_cache_gl_init();
         opengl_inited = 1;
+        perf_gpu_ready();
+        so_loga("[PERF] config revision=perf-cleanup-20261121 build=%s screen=%dx%d logical=%dx%d msaa=%d heap_mb=%d console_only=1 diagnostics=%d file_pool_lock=recursive",
+#ifdef DEBUG_SOLOADER
+                "Debug",
+#else
+                "Release",
+#endif
+                SCREEN_W, SCREEN_H, GAME_LOGICAL_W, GAME_LOGICAL_H, VITA_MSAA, MEMORY_NEWLIB_MB, PERF_DIAGNOSTICS);
     }
 
     return 0;
@@ -141,7 +159,7 @@ int soloader_init() {
 
     // Java 类要在 native 被调用前注册好；native 绑定依赖已重定位的模块
     soloader_setup_java(EternalLegacy_mod);
-    soloader_patch_modules();
+    if (soloader_patch_modules() < 0) so_logf("[LOADER] could not install game patches");
 
     soloader_init_opengl();
 
@@ -166,14 +184,32 @@ static int render_thread(SceSize args, void *argp) {
     (void)args;
     (void)argp;
 
+    uint64_t init_start = perf_now_us();
+    so_loga("[PERF] native_init begin");
     GameRenderer_onSurfaceCreated();
     GameRenderer_onSurfaceChanged(SCREEN_W, SCREEN_H);
     GameGLSurfaceView_onWindowFocusChanged();
+    so_loga("[PERF] native_init end us=%llu", (unsigned long long)(perf_now_us() - init_start));
 
     while (!EternalLegacy_should_quit()) {
+        uint64_t start = perf_now_us();
+        presentation_frame_begin();
+        uint64_t input_start = perf_now_us();
         controls_poll();
+        uint64_t input_end = perf_now_us();
         GameRenderer_onDrawFrame();
+        uint64_t render_end = perf_now_us();
+        presentation_frame_end();
+        uint64_t swap_start = perf_now_us();
         vglSwapBuffers(GL_TRUE);
+        uint64_t swap_end = perf_now_us();
+        perf_frame(input_end - input_start, render_end - input_end, swap_end - swap_start, swap_end - start);
+        perf_poll(0);
+        io_trace_poll(0);
+        native_io_poll(0);
+        font_cache_poll(0);
+        pack_cache_poll(0);
+        shader_cache_poll(0);
     }
 
     return 0;
@@ -210,6 +246,14 @@ int soloader_run() {
 void soloader_term() {
     so_logd("[LOADER] soloader_term...");
 
+    GLResLoader_close();
+    pack_cache_shutdown();
+    font_cache_shutdown();
+    shader_cache_shutdown();
+    native_io_shutdown();
+    native_io_poll(1);
+    io_trace_poll(1);
+    perf_poll(1);
     so_jni_fini();
     so_linker_fini();
 
