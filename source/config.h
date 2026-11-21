@@ -3,6 +3,11 @@
 
 #define SCREEN_W 960
 #define SCREEN_H 544
+#define GAME_LOGICAL_W 960
+#define GAME_LOGICAL_H 640
+
+// Native initialization needs the same 1 MiB GL-thread stack as Android.
+#define SCREEN_THREAD_STACK (1024 * 1024)
 
 #define MEMORY_NEWLIB_MB            256
 #define VITAGL_RAM_THRESHOLD_MB     20

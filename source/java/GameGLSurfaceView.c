@@ -9,6 +9,7 @@
 #include <so_java/java/lang/Object.h>
 
 #include "GameGLSurfaceView.h"
+#include "config.h"
 
 struct _GameGLSurfaceView {
     JInt placeholder;
@@ -16,8 +17,8 @@ struct _GameGLSurfaceView {
 
 static JClass  sClass    = NULL;
 static JObject sInstance = NULL;
-static JInt    sWidth    = 0;
-static JInt    sHeight   = 0;
+static JInt    sWidth    = GAME_LOGICAL_W;
+static JInt    sHeight   = GAME_LOGICAL_H;
 
 static void (*native_OnSize)(JNIEnv *env, jclass clazz, jint width, jint height);
 static void (*native_OnTouch)(JNIEnv *env, jclass clazz, jint type, jint x, jint y, jint pointer);
@@ -33,6 +34,9 @@ int GameGLSurfaceView_getHeight(void) {
 }
 
 void GameGLSurfaceView_onSizeChanged(int width, int height) {
+    // Android sees one complete 3:2 canvas; presentation maps it to Vita pixels.
+    width = GAME_LOGICAL_W;
+    height = GAME_LOGICAL_H;
     sWidth  = width;
     sHeight = height;
 

@@ -9,112 +9,87 @@
  * 直接调 *_soloader 那层而不是 hook 真正的 fopen/open：宿主自己的文件访问
  * （日志、缓存）不该被改道。
  */
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
-#include <string.h>
 #include <unistd.h>
 
-#include <psp2/io/stat.h>
-
-#include <so_common/so_logger.h>
 #include <so_libs/libc/bionic_fcntl.h>
 #include <so_libs/libc/bionic_stdio.h>
+#include <so_libs/libc/sys/bionic_stat.h>
 #include <so_linker/so_linker.h>
 
 #include "paths.h"
-#include "config.h"
-
-#define ANDROID_GAME_DIR "/sdcard/gameloft/games/GloftELHP/"
-#define ANDROID_DATA_DIR "/data/data/com.gameloft.android.TBFV.GloftELHP.ML"
-#define ANDROID_LIB_DIR  "/data/data/com.gameloft.android.TBFV.GloftELHP.ML/lib/"
-
-#define MAP_PATH_MAX 512
-
-/*
- * 命中映射规则时把结果写进 buf 并返回 buf，否则返回原指针（零拷贝）。
- * 相对路径里引擎常用的 "./data/..." / "data/..." 也落回游戏数据目录。
- */
-static const char *map_path(const char *path, char *buf) {
-    if (!path) {
-        return path;
-    }
-
-    if (strncmp(path, ANDROID_GAME_DIR, sizeof(ANDROID_GAME_DIR) - 1) == 0) {
-        snprintf(buf, MAP_PATH_MAX, "%s%s", GAME_DATA_DIR, path + sizeof(ANDROID_GAME_DIR) - 1);
-        return buf;
-    }
-
-    // 引擎会读自己安装目录下的 .so（自查符号表），指回 port 的库目录
-    if (strncmp(path, ANDROID_LIB_DIR, sizeof(ANDROID_LIB_DIR) - 1) == 0) {
-        snprintf(buf, MAP_PATH_MAX, "%s%s", SO_LIB_DIR, path + sizeof(ANDROID_LIB_DIR) - 1);
-        return buf;
-    }
-
-    if (strncmp(path, ANDROID_DATA_DIR, sizeof(ANDROID_DATA_DIR) - 1) == 0) {
-        const char *rest = path + sizeof(ANDROID_DATA_DIR) - 1;
-
-        while (*rest == '/') {
-            rest++;
-        }
-        snprintf(buf, MAP_PATH_MAX, "%sfiles/%s", DATA_PATH, rest);
-        return buf;
-    }
-
-    if (path[0] != '/') {
-        const char *rel = path;
-
-        while (rel[0] == '.' && rel[1] == '/') {
-            rel += 2;
-        }
-        snprintf(buf, MAP_PATH_MAX, "%s%s", GAME_DATA_DIR, rel);
-        return buf;
-    }
-
-    return path;
-}
+#include "utils/paths.h"
+#include "utils/perf.h"
+#include "utils/native_io.h"
+#include "voice_index.h"
 
 static FILE *repl_fopen(const char *path, const char *mode) {
-    char        buf[MAP_PATH_MAX];
-    const char *mapped = map_path(path, buf);
-
-    FILE *result = fopen_soloader(mapped, mode);
-    if (!result) {
-        so_logd("[PATCH] fopen('%s','%s'): 失败", mapped, mode);
-    }
-
+    uint64_t start = perf_now_us();
+    char buf[PATH_MAPPED_MAX];
+    const char *mapped = paths_from_android(path, buf, sizeof(buf));
+    int hit = 0;
+    FILE *result = mapped ? native_io_fopen_at(mapped, mode, &hit, (uintptr_t)__builtin_return_address(0)) : NULL;
+    int saved_errno = errno;
+    perf_record(PERF_FOPEN, mapped ? mapped : path, start, 0, result != NULL, hit == 1);
+    if (result && mapped) voice_index_prefetch_following(mapped);
+    native_io_poll(0);
+    errno = saved_errno;
     return result;
 }
 
 static int repl_open(const char *path, int oflag, ...) {
-    char        buf[MAP_PATH_MAX];
-    mode_t      mode   = 0;
-    const char *mapped = map_path(path, buf);
-
+    uint64_t start = perf_now_us();
+    char buf[PATH_MAPPED_MAX];
+    const char *mapped = paths_from_android(path, buf, sizeof(buf));
+    int mode = 0;
     if (oflag & BIONIC_O_CREAT) {
         va_list args;
         va_start(args, oflag);
-        mode = va_arg(args, mode_t);
+        mode = va_arg(args, int);
         va_end(args);
     }
-
-    return open_soloader(mapped, oflag, mode);
+    int result = mapped ? native_io_open_at(mapped, oflag, mode, (uintptr_t)__builtin_return_address(0)) : -1;
+    perf_record(PERF_OPEN, mapped ? mapped : path, start, 0, result >= 0, 0);
+    return result;
 }
 
 static int repl_access(const char *path, int mode) {
-    char        buf[MAP_PATH_MAX];
-    const char *mapped = map_path(path, buf);
+    uint64_t start = perf_now_us();
+    char buf[PATH_MAPPED_MAX];
+    const char *mapped = paths_from_android(path, buf, sizeof(buf));
+    int result = mapped ? access(mapped, mode) : -1;
+    perf_record(PERF_STAT, mapped ? mapped : path, start, 0, result == 0, 0);
+    return result;
+}
 
-    return access(mapped, mode);
+static int repl_stat(const char *path, struct stat_bionic *st) {
+    uint64_t start = perf_now_us();
+    char buf[PATH_MAPPED_MAX];
+    const char *mapped = paths_from_android(path, buf, sizeof(buf));
+    int result = mapped ? stat_soloader(mapped, st) : -1;
+    perf_record(PERF_STAT, mapped ? mapped : path, start, 0, result == 0, 0);
+    return result;
+}
+
+static int repl_lstat(const char *path, struct stat_bionic *st) {
+    uint64_t start = perf_now_us();
+    char buf[PATH_MAPPED_MAX];
+    const char *mapped = paths_from_android(path, buf, sizeof(buf));
+    int result = mapped ? lstat_soloader(mapped, st) : -1;
+    perf_record(PERF_STAT, mapped ? mapped : path, start, 0, result == 0, 0);
+    return result;
 }
 
 int soloader_patch_paths(so_module *mod) {
-    if (!mod) {
-        return -1;
-    }
-
-    so_module_hook_import(mod, "fopen", (void *)repl_fopen, NULL);
-    so_module_hook_import(mod, "open", (void *)repl_open, NULL);
-    so_module_hook_import(mod, "access", (void *)repl_access, NULL);
-
+    if (!mod) return -1;
+    const struct { const char *name; void *fn; } hooks[] = {
+        {"fopen", repl_fopen}, {"open", repl_open}, {"access", repl_access},
+        {"stat", repl_stat}, {"lstat", repl_lstat},
+    };
+    for (unsigned i = 0; i < sizeof(hooks) / sizeof(hooks[0]); ++i)
+        if (so_module_find_import(mod, hooks[i].name) &&
+            so_module_hook_import(mod, hooks[i].name, hooks[i].fn, NULL) < 0) return -1;
     return 0;
 }

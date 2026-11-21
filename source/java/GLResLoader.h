@@ -9,5 +9,6 @@ void setup_GLResLoader(so_module *mod);
 
 // Android 侧 GLResLoader.init()
 void GLResLoader_init(void);
+void GLResLoader_close(void);
 
 #endif
