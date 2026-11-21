@@ -43,6 +43,9 @@ typedef struct so_module so_module;
 int  so_linker_init();
 void so_linker_fini();
 
+int so_linker_register_module(so_module *mod);
+int so_linker_unregister_module(so_module *mod);
+
 so_module *so_linker_find_module(const char *soname);
 
 // 按 PC 查找所在模块的 .ARM.exidx 表（供 __gnu_Unwind_Find_exidx 使用）。
@@ -69,18 +72,17 @@ int so_inject_data(void *target, const void *data, size_t len);
 #define SO_CONTINUE(type, p_hook, ...) \
     (((type (*)())((p_hook)->orig_func))(__VA_ARGS__))
 
-so_module *so_module_create_virtual(const so_library *library);  // 从 so_library 创建虚拟库模块
-so_module *so_module_load(const char *filename);                 // 从文件加载模块
-so_module *so_module_load_mem(void *buffer, size_t size);        // 从内存加载模块
-void       so_module_unload(so_module *mod);                     // 卸载模块
-int        so_module_relocate(so_module *mod);                   // 模块重定位
-int        so_module_init(so_module *mod);                       // 模块初始化
-void       so_module_fini(so_module *mod);                       // 模块反初始化
-int        so_module_flush_caches(so_module *mod);               // 模块刷新缓存
+so_module *so_module_create_virtual(const so_library *library);              // 从 so_library 创建虚拟库模块
+so_module *so_module_load(const char *filename);                             // 从文件加载模块
+so_module *so_module_load_mem(void *buffer, size_t size, const char *name);  // 从内存加载模块（name：无 DT_SONAME 时的兜底名，可 NULL）
+void       so_module_unload(so_module *mod);                                 // 卸载模块
+int        so_module_relocate(so_module *mod);                               // 模块重定位
+int        so_module_init(so_module *mod);                                   // 模块初始化
+void       so_module_fini(so_module *mod);                                   // 模块反初始化
 
-so_module *so_module_open(const char *filename);           // 从文件打开模块 (load + relocate + init)
-so_module *so_module_open_mem(void *buffer, size_t size);  // 从内存打开模块 (load + relocate + init)
-void       so_module_close(so_module *mod);                // 关闭模块 (unload + fini)
+so_module *so_module_open(const char *filename);                             // 从文件打开模块 (load + relocate + init)
+so_module *so_module_open_mem(void *buffer, size_t size, const char *name);  // 从内存打开模块 (load + relocate + init)
+void       so_module_close(so_module *mod);                                  // 关闭模块 (unload + fini)
 
 int  so_module_retain(so_module *mod);
 void so_module_release(so_module *mod);
@@ -96,22 +98,18 @@ int so_module_hook_plt(so_module *mod, const char *sym_name, void *repl, so_hook
 
 int so_module_inject_data(so_module *mod, ptrdiff_t vaddr, const void *data, size_t len);
 
-/*
- * dlopen 句柄要按 bionic 的 soinfo 布局暴露模块的 ELF 表：安卓上的引擎会把
- * dlopen 的返回值当 soinfo* 直接遍历符号表和 PLT 重定位（如 StormGLOFT 的
- * hook_import_function），拿到别的结构就会踩到野指针。
- */
-typedef struct so_elf_tables {
+typedef struct so_elfinfo {
     const char      *soname;
     intptr_t         load_bias;  // 实址 = 虚址 + load_bias
+    size_t           load_size;  // PT_LOAD 跨度
     const Elf32_Sym *dynsym;     // .dynsym
     const char      *dynstr;     // .dynstr
     const uint32_t  *hash;       // .hash（SysV；只有 GNU hash 的模块为 NULL）
     const Elf32_Rel *rel_plt;    // .rel.plt（仅 REL 格式；RELA 模块为 NULL）
     size_t           num_rel_plt;
-} so_elf_tables;
+} so_elfinfo;
 
-int so_module_get_elf_tables(so_module *mod, so_elf_tables *tables);
+int so_module_get_elfinfo(so_module *mod, so_elfinfo *tables);
 
 const char *so_module_get_name(so_module *mod);
 void       *so_module_get_entry_point(so_module *mod);

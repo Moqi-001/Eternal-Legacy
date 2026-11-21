@@ -379,7 +379,7 @@ so_module *so_module_create_virtual(const so_library *library) {
     return mod;
 }
 
-so_module *so_module_load_mem(void *buffer, size_t size) {
+so_module *so_module_load_mem(void *buffer, size_t size, const char *name) {
     if (!buffer || size == 0) {
         return NULL;
     }
@@ -557,8 +557,15 @@ so_module *so_module_load_mem(void *buffer, size_t size) {
         return NULL;
     }
 
-    // 保存共享对象名称
-    mod->soname = strdup(mod->dynstr + soname_offset);
+    // 保存共享对象名称：没有 DT_SONAME 时用调用方给的名称兜底（取 basename）；
+    // 连名称都没有就取 dynstr[0]（恒为空串）——soname 恒非 NULL，
+    // find_module 对这类名称匹配不上自然跳过
+    if (!soname_offset && name) {
+        const char *base = strrchr(name, '/');
+        mod->soname = strdup(base ? base + 1 : name);
+    } else {
+        mod->soname = strdup(mod->dynstr + soname_offset);
+    }
 
     // 既无 SysV 也无 GNU 哈希：符号查找将退回线性遍历
     if (!mod->hash && !mod->gnu_hash) {
@@ -631,7 +638,7 @@ so_module *so_module_load(const char *filename) {
     sceIoRead(fd, buffer, size);
     sceIoClose(fd);
 
-    so_module *mod = so_module_load_mem(buffer, size);
+    so_module *mod = so_module_load_mem(buffer, size, filename);
     free(buffer);
 
     if (!mod) {
@@ -859,6 +866,12 @@ int so_module_relocate(so_module *mod) {
 
     mod->status = SO_MODULE_STATUS_RELOCATED;
 
+    // 重定位会改写模块内存（GOT/数据指针，DT_TEXTREL 时还有代码段），
+    // ARM 的 I-cache 不与 D-cache 一致，刷缓存是 relocate 的固定收尾
+    if (so_cacheflush(mod->load_base, mod->load_size) < 0) {
+        return -1;
+    }
+
     so_logd("[SOLINKER] so_module_relocate(%p): success! ('%s')", mod, mod->soname);
     return 0;
 }
@@ -895,6 +908,12 @@ int so_module_init(so_module *mod) {
     }
 
     mod->status = SO_MODULE_STATUS_INITIALIZED;
+
+    // init 成功即进入注册表：dlopen、依赖解析、exidx 查找都以注册表为准。
+    // 幂等——手动提前注册过的模块这里直接 no-op；注册失败视为 init 失败
+    if (so_linker_register_module(mod) < 0) {
+        return -1;
+    }
 
     so_logd("[SOLINKER] so_module_init(%p): success! ('%s')", mod, mod->soname);
     return 0;
@@ -936,22 +955,8 @@ void so_module_fini(so_module *mod) {
     mod->status = SO_MODULE_STATUS_FINALIZED;
 }
 
-int so_module_flush_caches(so_module *mod) {
-    if (!mod || !mod->load_base) {
-        return -1;
-    }
-
-    if (so_cacheflush(mod->load_base, mod->load_size) < 0) {
-        so_logd("[SOLINKER] so_module_flush_caches(%p): failed! ('%s')", mod, mod->soname);
-        return -1;
-    }
-
-    so_logd("[SOLINKER] so_module_flush_caches(%p): success! ('%s')", mod, mod->soname);
-    return 0;
-}
-
-so_module *so_module_open_mem(void *buffer, size_t size) {
-    so_module *mod = so_module_load_mem(buffer, size);
+so_module *so_module_open_mem(void *buffer, size_t size, const char *name) {
+    so_module *mod = so_module_load_mem(buffer, size, name);
     if (!mod) {
         so_loge("[SOLINKER] so_module_open_mem(%p,%u): failed to load!", buffer, size);
         return NULL;
@@ -959,12 +964,6 @@ so_module *so_module_open_mem(void *buffer, size_t size) {
 
     if (so_module_relocate(mod) < 0) {
         so_loge("[SOLINKER] so_module_open_mem(%p,%u): failed to relocate!", buffer, size);
-        so_module_unload(mod);
-        return NULL;
-    }
-
-    if (so_module_flush_caches(mod) < 0) {
-        so_loge("[SOLINKER] so_module_open_mem(%p,%u): failed to flush caches!", buffer, size);
         so_module_unload(mod);
         return NULL;
     }
@@ -993,19 +992,11 @@ so_module *so_module_open(const char *filename) {
         return NULL;
     }
 
-    if (so_module_flush_caches(mod) < 0) {
-        so_loge("[SOLINKER] so_module_open(%s): failed to flush caches!", filename);
-        so_module_unload(mod);
-        return NULL;
-    }
-
     if (so_module_init(mod) < 0) {
         so_loge("[SOLINKER] so_module_open(%s): failed to initialize!", filename);
         so_module_unload(mod);
         return NULL;
     }
-
-    so_linker_register_module(mod);
 
     so_logd("[SOLINKER] so_module_open('%s'): success! load_base=%p, load_size=%u, load_bias=0x%x, soname='%s'",
             filename, mod->load_base, mod->load_size, mod->load_bias, mod->soname ? mod->soname : "(null)");
@@ -1055,9 +1046,10 @@ void *so_module_find_import(so_module *mod, const char *sym_name) {
 // 会改写只读代码段造成严重错误，或改掉所有模块共用的实现，所以对其的 hook 行为应一律拒绝。
 static int _is_virtual_module(so_module *mod, const char *op) {
     if (!mod->load_base) {
-        so_loge("[SOLINKER] %s: '%s' is a virtual library (no loaded image); "
-                "hook the real .so module instead",
-                op, mod->soname ? mod->soname : "?");
+        so_loge(
+            "[SOLINKER] %s: '%s' is a virtual library (no loaded image); "
+            "hook the real .so module instead",
+            op, mod->soname ? mod->soname : "?");
         return 1;
     }
 
@@ -1127,18 +1119,19 @@ int so_module_inject_data(so_module *mod, ptrdiff_t vaddr, const void *repl, siz
     return so_inject_data(target, repl, len);
 }
 
-int so_module_get_elf_tables(so_module *mod, so_elf_tables *tables) {
-    if (!mod || !tables) {
+int so_module_get_elfinfo(so_module *mod, so_elfinfo *elfinfo) {
+    if (!mod || !elfinfo) {
         return -1;
     }
 
-    tables->soname      = mod->soname;
-    tables->load_bias   = mod->load_bias;
-    tables->dynsym      = mod->dynsym;
-    tables->dynstr      = mod->dynstr;
-    tables->hash        = mod->hash;  // 只有 GNU hash 的模块为 NULL
-    tables->rel_plt     = mod->rel_plt;
-    tables->num_rel_plt = mod->num_rel_plt;
+    elfinfo->soname      = mod->soname;
+    elfinfo->load_bias   = mod->load_bias;
+    elfinfo->load_size   = mod->load_size;
+    elfinfo->dynsym      = mod->dynsym;
+    elfinfo->dynstr      = mod->dynstr;
+    elfinfo->hash        = mod->hash;  // 只有 GNU hash 的模块为 NULL
+    elfinfo->rel_plt     = mod->rel_plt;
+    elfinfo->num_rel_plt = mod->num_rel_plt;
 
     return 0;
 }
