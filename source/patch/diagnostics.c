@@ -8,6 +8,7 @@
 #include <vitaGL.h>
 #include "diagnostics.h"
 #include "utils/perf.h"
+#include "utils/console_logger.h"
 
 #if PERF_DIAGNOSTICS
 extern ssize_t read_soloader(int fd, void *buf, size_t count);
@@ -111,6 +112,7 @@ static void trace_compressed_sub(GLenum target, GLint level, GLint x, GLint y, G
 int soloader_patch_diagnostics(so_module *mod) {
 #if PERF_DIAGNOSTICS
     const struct { const char *name; void *fn; } hooks[] = {
+        {"printf", console_game_printf}, {"puts", console_game_puts},
         {"fread", trace_fread}, {"read", trace_read}, {"fseek", trace_fseek},
         {"fseeko", trace_fseeko}, {"lseek", trace_lseek},
         {"glCompileShader", trace_compile}, {"glLinkProgram", trace_link},

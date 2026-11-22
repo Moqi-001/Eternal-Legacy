@@ -41,11 +41,11 @@ void perf_record(PerfOp op, const char *path, uint64_t start, size_t bytes, int 
     atomic_fetch_add_explicit(&c->hits, hit, memory_order_relaxed);
     update_max(&c->max_us, us);
     // Limit error/slow details to four per operation per reporting interval.
-    if ((us >= 20000 || (!ok && (op >= PERF_COMPILE || saved_errno != ENOENT))) && atomic_fetch_add_explicit(&c->details, 1, memory_order_relaxed) < 4)
+    if ((us >= 20000 || (!ok && (op >= PERF_COMPILE || (saved_errno != ENOENT && saved_errno != EISDIR)))) && atomic_fetch_add_explicit(&c->details, 1, memory_order_relaxed) < 4)
         so_loga("[PERF] detail op=%s ok=%d us=%u bytes=%u errno=%d path=%s",
                 s_names[op], ok, us, (unsigned)bytes, ok ? 0 : saved_errno, path ? path : "-");
-    // Also report during long native loading calls that have not returned a frame.
-    perf_poll(0);
+    /* Reports belong to the GL frame tail. In particular, a fast failed probe
+     * must not synchronously print a whole performance window inside Update. */
     errno = saved_errno;
 }
 

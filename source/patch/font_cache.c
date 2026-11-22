@@ -260,7 +260,6 @@ static void record_span(int chars, void *face, unsigned long code, int flags, in
                 chars ? "load_char" : "load_glyph", sceKernelGetThreadId(), (unsigned long)caller_elf(pc),
                 face, chars ? "codepoint" : "glyph_index", code, flags, result,
                 (unsigned long long)duration);
-    font_cache_poll(0);
     errno = saved_errno;
 }
 static int font_load_char(void *face, unsigned long code, int flags) {

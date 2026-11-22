@@ -13,7 +13,7 @@ project(Runtime C CXX)
 set(VITA_APP_NAME "Eternal Legacy")
 set(VITA_TITLEID  "ETERNAL00")     # 9 位
 set(VITA_VPKNAME  "EternalLegacy")
-set(VITA_VERSION  "01.03")
+set(VITA_VERSION  "01.05")
 set(VITA_MKSFOEX_FLAGS "-d ATTRIBUTE2=12")
 
 # Optional: used for "send" target
@@ -43,7 +43,7 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${CMAKE_SOURCE_DIR}/libs/lib/libvitaGL.a" "${CMAKE_SOURCE_DIR}/libs/lib/libvitashark.a")
 file(SHA256 "${CMAKE_SOURCE_DIR}/libs/lib/libvitaGL.a" ETERNAL_VGL_SHA)
 file(SHA256 "${CMAKE_SOURCE_DIR}/libs/lib/libvitashark.a" ETERNAL_SHARK_SHA)
-add_compile_definitions(ETERNAL_SHADER_CACHE_ABI="stage-gxp-v3-${ETERNAL_VGL_SHA}-${ETERNAL_SHARK_SHA}-msaa${VITA_MSAA}")
+add_compile_definitions(ETERNAL_SHADER_CACHE_ABI="stage-gxp-v4-${ETERNAL_VGL_SHA}-${ETERNAL_SHARK_SHA}-msaa${VITA_MSAA}")
 
 # makes sincos, sincosf, etc. visible
 add_definitions(-D_GNU_SOURCE -D__POSIX_VISIBLE=999999)
@@ -85,6 +85,7 @@ file(GLOB_RECURSE SO_LIBSTDCXX_SRC        vendor/so_libs/libstdcxx/*.c)
 
 # ==== 项目代码：source/* ====
 file(GLOB_RECURSE SOURCE_SRC source/*.c)
+list(APPEND SOURCE_SRC source/patch/float_math_arm.S)
 
 add_executable(${CMAKE_PROJECT_NAME}
   ${SO_COMMON_SRC}

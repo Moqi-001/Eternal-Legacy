@@ -1,7 +1,6 @@
 /* Preserve KResource's decoding and return ABI; avoid only its redundant seeks. */
 #include <errno.h>
 #include <stdint.h>
-#include <stdatomic.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -9,7 +8,6 @@
 #include <so_libs/libc/bionic_stdio.h>
 
 #include "resource_parser.h"
-#include "utils/perf.h"
 
 typedef struct {
     const char *symbol;
@@ -21,7 +19,7 @@ typedef struct {
 
 /* Known original libEternalLegacy.so c3555dd862c78d0da3c6ef2505e98a0a...
  * Full instruction bytes below fingerprint every affected scalar function,
- * its decode dependency and the parser whose duration is measured. */
+ * its decode dependency and the read-only resource parser. */
 static const unsigned char s_original_0[] = {
     0xf0, 0xb5, 0x83, 0xb0, 0x06, 0x1c, 0x08, 0x1c, 0x0d, 0x1c, 0x14, 0x1c, 0x2f, 0xf7, 0x3c, 0xe9,
     0x21, 0x1c, 0x07, 0x1c, 0x01, 0xac, 0x28, 0x1c, 0x01, 0x22, 0x2f, 0xf7, 0x52, 0xe8, 0x2b, 0x1c,
@@ -143,9 +141,8 @@ static const ParserCode s_code[] = {
 };
 
 static so_module *s_module;
-static so_hook_ref s_seek_hook, s_parser_hook;
+static so_hook_ref s_seek_hook;
 static uintptr_t s_seek_callers[7];
-static atomic_uint s_skipped, s_fallback, s_segments;
 static int resource_parser_fseek(FILE *file, long offset, int whence) {
     uintptr_t caller = (uintptr_t)__builtin_return_address(0) & ~(uintptr_t)1;
     int known = 0;
@@ -164,31 +161,10 @@ static int resource_parser_fseek(FILE *file, long offset, int whence) {
         int saved_errno = errno;
         long position = ftell_soloader(file);
         errno = saved_errno;
-        if (position >= 0) {
-            atomic_fetch_add_explicit(&s_skipped, 1, memory_order_relaxed);
-            return 0;
-        }
+        if (position >= 0) return 0;
     }
-    if (known) atomic_fetch_add_explicit(&s_fallback, 1, memory_order_relaxed);
     int (*fallback)(FILE *, long, int) = (int (*)(FILE *, long, int))s_seek_hook.orig_func;
     return fallback(file, offset, whence);
-}
-
-static void *resource_parser_get_xml(void *self, const char *path) {
-    uint64_t start = perf_now_us();
-    void *result = ((void *(*)(void *, const char *))s_parser_hook.orig_func)(self, path);
-    int saved_errno = errno;
-    uint64_t elapsed = perf_now_us() - start;
-    unsigned segments = atomic_fetch_add_explicit(&s_segments, 1, memory_order_relaxed) + 1;
-    /* One line per complete resource table, never one line per scalar field.
-     * Counts are process totals, so concurrent parser segments are not
-     * misleadingly assigned each other's skipped calls. */
-    so_loga("[PERF] resource_parser segment=%u ok=%d us=%llu zero_seek_skips_total=%u fallback_total=%u path=%s",
-            segments, result != NULL, (unsigned long long)elapsed,
-            atomic_load_explicit(&s_skipped, memory_order_relaxed),
-            atomic_load_explicit(&s_fallback, memory_order_relaxed), path ? path : "-");
-    errno = saved_errno;
-    return result;
 }
 
 int soloader_patch_resource_parser(so_module *mod) {
@@ -218,16 +194,9 @@ int soloader_patch_resource_parser(so_module *mod) {
     }
     if (callers != sizeof(s_seek_callers) / sizeof(s_seek_callers[0])) return -1;
 
-    if (so_module_hook_export(mod, "_ZN9KResource10getXmlFileEPKc", resource_parser_get_xml,
-                              &s_parser_hook) < 0) return -1;
-    if (!s_parser_hook.orig_func) { so_unhook(&s_parser_hook); return -1; }
-    if (so_module_hook_import(mod, "fseek", resource_parser_fseek, &s_seek_hook) < 0) {
-        so_unhook(&s_parser_hook);
-        return -1;
-    }
+    if (so_module_hook_import(mod, "fseek", resource_parser_fseek, &s_seek_hook) < 0) return -1;
     if (!s_seek_hook.orig_func || s_seek_hook.orig_func == resource_parser_fseek) {
         so_unhook(&s_seek_hook);
-        so_unhook(&s_parser_hook);
         return -1;
     }
     s_module = mod;

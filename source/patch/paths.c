@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include <so_libs/libc/bionic_fcntl.h>
@@ -30,11 +31,10 @@ static FILE *repl_fopen(const char *path, const char *mode) {
     char buf[PATH_MAPPED_MAX];
     const char *mapped = paths_from_android(path, buf, sizeof(buf));
     int hit = 0;
-    FILE *result = mapped ? native_io_fopen_at(mapped, mode, &hit, (uintptr_t)__builtin_return_address(0)) : NULL;
+    FILE *result = mapped ? native_io_fopen(mapped, mode, &hit) : NULL;
     int saved_errno = errno;
     perf_record(PERF_FOPEN, mapped ? mapped : path, start, 0, result != NULL, hit == 1);
     if (result && mapped) voice_index_prefetch_following(mapped);
-    native_io_poll(0);
     errno = saved_errno;
     return result;
 }
@@ -50,7 +50,7 @@ static int repl_open(const char *path, int oflag, ...) {
         mode = va_arg(args, int);
         va_end(args);
     }
-    int result = mapped ? native_io_open_at(mapped, oflag, mode, (uintptr_t)__builtin_return_address(0)) : -1;
+    int result = mapped ? native_io_open(mapped, oflag, mode) : -1;
     perf_record(PERF_OPEN, mapped ? mapped : path, start, 0, result >= 0, 0);
     return result;
 }
@@ -59,7 +59,11 @@ static int repl_access(const char *path, int mode) {
     uint64_t start = perf_now_us();
     char buf[PATH_MAPPED_MAX];
     const char *mapped = paths_from_android(path, buf, sizeof(buf));
-    int result = mapped ? access(mapped, mode) : -1;
+    int result = -1;
+    if (mapped) {
+        if (!(mode & ~(R_OK | W_OK | X_OK)) && native_io_known_absent(mapped)) errno = ENOENT;
+        else result = access(mapped, mode);
+    }
     perf_record(PERF_STAT, mapped ? mapped : path, start, 0, result == 0, 0);
     return result;
 }
@@ -68,7 +72,11 @@ static int repl_stat(const char *path, struct stat_bionic *st) {
     uint64_t start = perf_now_us();
     char buf[PATH_MAPPED_MAX];
     const char *mapped = paths_from_android(path, buf, sizeof(buf));
-    int result = mapped ? stat_soloader(mapped, st) : -1;
+    int result = -1;
+    if (mapped) {
+        if (st && native_io_known_absent(mapped)) errno = ENOENT;
+        else result = stat_soloader(mapped, st);
+    }
     perf_record(PERF_STAT, mapped ? mapped : path, start, 0, result == 0, 0);
     return result;
 }
@@ -77,8 +85,60 @@ static int repl_lstat(const char *path, struct stat_bionic *st) {
     uint64_t start = perf_now_us();
     char buf[PATH_MAPPED_MAX];
     const char *mapped = paths_from_android(path, buf, sizeof(buf));
-    int result = mapped ? lstat_soloader(mapped, st) : -1;
+    int result = -1;
+    if (mapped) {
+        if (st && native_io_known_absent(mapped)) errno = ENOENT;
+        else result = lstat_soloader(mapped, st);
+    }
     perf_record(PERF_STAT, mapped ? mapped : path, start, 0, result == 0, 0);
+    return result;
+}
+
+/* The byte cache and directory evidence must observe every game-side mutation,
+ * including both sides of rename. Begin before the native operation so readers
+ * cannot publish a snapshot or reuse stale bytes while a change is pending. */
+static int mutate_path(const char *path, int (*operation)(const char *)) {
+    char buf[PATH_MAPPED_MAX];
+    const char *mapped = paths_from_android(path, buf, sizeof(buf));
+    void *token = NULL;
+    if (!mapped || native_io_mutation_begin(mapped, &token) < 0) return -1;
+    int result = operation(mapped);
+    native_io_mutation_end(token, mapped, result == 0);
+    return result;
+}
+static int repl_unlink(const char *path) {
+    return mutate_path(path, unlink);
+}
+static int repl_remove(const char *path) {
+    return mutate_path(path, remove);
+}
+static int repl_rmdir(const char *path) {
+    return mutate_path(path, rmdir);
+}
+static int repl_mkdir(const char *path, mode_t mode) {
+    char buf[PATH_MAPPED_MAX];
+    const char *mapped = paths_from_android(path, buf, sizeof(buf));
+    void *token = NULL;
+    if (!mapped || native_io_mutation_begin(mapped, &token) < 0) return -1;
+    int result = mkdir(mapped, mode);
+    native_io_mutation_end(token, mapped, result == 0);
+    return result;
+}
+static int repl_rename(const char *old_path, const char *new_path) {
+    char old_buf[PATH_MAPPED_MAX], new_buf[PATH_MAPPED_MAX];
+    const char *old_mapped = paths_from_android(old_path, old_buf, sizeof(old_buf));
+    if (!old_mapped) return -1;
+    const char *new_mapped = paths_from_android(new_path, new_buf, sizeof(new_buf));
+    if (!new_mapped) return -1;
+    void *old_token = NULL, *new_token = NULL;
+    if (native_io_mutation_begin(old_mapped, &old_token) < 0) return -1;
+    if (native_io_mutation_begin(new_mapped, &new_token) < 0) {
+        native_io_mutation_end(old_token, old_mapped, 0);
+        return -1;
+    }
+    int result = rename(old_mapped, new_mapped);
+    native_io_mutation_end(old_token, old_mapped, result == 0);
+    native_io_mutation_end(new_token, new_mapped, result == 0);
     return result;
 }
 
@@ -87,6 +147,8 @@ int soloader_patch_paths(so_module *mod) {
     const struct { const char *name; void *fn; } hooks[] = {
         {"fopen", repl_fopen}, {"open", repl_open}, {"access", repl_access},
         {"stat", repl_stat}, {"lstat", repl_lstat},
+        {"mkdir", repl_mkdir}, {"rename", repl_rename}, {"unlink", repl_unlink},
+        {"remove", repl_remove}, {"rmdir", repl_rmdir},
     };
     for (unsigned i = 0; i < sizeof(hooks) / sizeof(hooks[0]); ++i)
         if (so_module_find_import(mod, hooks[i].name) &&

@@ -56,7 +56,6 @@ static void record_trace(unsigned op, const KernelSnapshot *s, int uid, int64_t 
                 (unsigned long long)us, (void *)caller, (unsigned)elf,
                 s ? s->path : "<untracked>");
     }
-    io_trace_poll(0);
     errno = saved_errno;
 }
 

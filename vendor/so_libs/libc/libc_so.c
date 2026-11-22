@@ -51,7 +51,7 @@
 
 // ===== ARM C ABI (aeabi) =====
 extern void               __aeabi_atexit(void *object, void (*destructor)(void *), void *dso_handle);
-extern double             __aeabi_d2f(float f);
+extern float              __aeabi_d2f(double d);
 
 // VitaSDK 的头文件没有声明这两个，符号在 newlib 里
 uid_t                     getuid(void);
@@ -76,7 +76,7 @@ extern int                __aeabi_dcmplt(double a, double b);
 extern double             __aeabi_ddiv(double dividend, double divisor);
 extern double             __aeabi_dmul(double a, double b);
 extern double             __aeabi_dsub(double a, double b);
-extern float              __aeabi_f2d(double d);
+extern double             __aeabi_f2d(float f);
 extern int                __aeabi_f2iz(float f);
 extern long long          __aeabi_f2lz(float f);
 extern unsigned long long __aeabi_f2ulz(float f);

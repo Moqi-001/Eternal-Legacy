@@ -25,8 +25,11 @@
 #include "patch/font_cache.h"
 #include "patch/pack_cache.h"
 #include "patch/shader_cache.h"
+#include "patch/frame_profile.h"
 #include "utils/native_io.h"
 #include "utils/io_trace.h"
+#include "utils/console_logger.h"
+#include "patch/resource_warmup.h"
 
 extern so_library liblog_so;
 extern so_library libz_so;
@@ -92,7 +95,7 @@ static int soloader_init_opengl() {
         shader_cache_gl_init();
         opengl_inited = 1;
         perf_gpu_ready();
-        so_loga("[PERF] config revision=perf-master-20261121 build=%s screen=%dx%d logical=%dx%d msaa=%d heap_mb=%d console_only=1 diagnostics=%d file_pool_lock=recursive",
+        so_loga("[PERF] config revision=perf-master-20261122-r3 build=%s screen=%dx%d logical=%dx%d msaa=%d heap_mb=%d console_only=1 diagnostics=%d file_pool_lock=recursive",
 #ifdef DEBUG_SOLOADER
                 "Debug",
 #else
@@ -148,6 +151,7 @@ static int soloader_jni_onload(so_module *mod) {
 }
 
 int soloader_init() {
+    if (console_logger_start() < 0) so_loga("[CONSOLE] async unavailable; synchronous boot logger retained");
     so_logd("[LOADER] soloader_init...");
 
     check_kubridge();
@@ -218,6 +222,7 @@ static int run_thread(SceSize args, void *argp) {
         uint64_t input_end = perf_now_us();
 
         if (video_is_playing()) {
+            frame_profile_poll(1);
             draw_video_frame();
             video_was_playing = 1;
         } else {
@@ -230,9 +235,11 @@ static int run_thread(SceSize args, void *argp) {
                 EternalLegacy_onResume();
                 GameGLSurfaceView_onWindowFocusChanged();
             }
+            frame_profile_begin();
             presentation_frame_begin();
             GameRenderer_onDrawFrame();
             presentation_frame_end();
+            frame_profile_end();
         }
 
         uint64_t render_end = perf_now_us();
@@ -240,12 +247,15 @@ static int run_thread(SceSize args, void *argp) {
         vglSwapBuffers(GL_TRUE);
         uint64_t swap_end = perf_now_us();
         perf_frame(input_end - input_start, render_end - input_end, swap_end - swap_start, swap_end - start);
+        frame_profile_poll(0);
         perf_poll(0);
         io_trace_poll(0);
         native_io_poll(0);
         font_cache_poll(0);
         pack_cache_poll(0);
         shader_cache_poll(0);
+        resource_warmup_poll(0);
+        console_logger_poll(0);
     }
 
     return 0;
@@ -282,6 +292,7 @@ void soloader_term() {
     so_logd("[LOADER] soloader_term...");
 
     video_close();
+    frame_profile_poll(1);
     GLResLoader_close();
     pack_cache_shutdown();
     font_cache_shutdown();
@@ -294,6 +305,7 @@ void soloader_term() {
     so_linker_fini();
 
     so_logd("[LOADER] soloader_term success!");
+    console_logger_shutdown();
 }
 
 int IsRunningInVita3K() {

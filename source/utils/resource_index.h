@@ -15,4 +15,13 @@ enum {
 /* Exact root/top-level type; root '.' and known trailing-slash directories are
  * recognized. Case aliases, parent traversal and nested paths remain unknown. */
 int resource_index_type(const char *mapped_path, size_t *size);
+/* Canonical nested resource/ZIP-parent evidence. Missing components encountered
+ * before the leaf also cover later ancestor candidates, regardless of suffix.
+ * Standalone top-level metadata remains unknown. Existing loose files are never
+ * byte-cache keys. At most 4 directories x 512 entries + 64 ancestor proofs;
+ * incomplete/failed/aliased directories always return UNKNOWN. */
+int resource_index_path_type(const char *mapped_path);
+/* Call before and after scoped filesystem mutations. Root asset inventory stays
+ * immutable; native_io's mutable-path guard overrides stale root evidence. */
+void resource_index_invalidate(const char *mapped_path);
 #endif

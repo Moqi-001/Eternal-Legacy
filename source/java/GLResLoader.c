@@ -82,7 +82,7 @@ static JObject resource_request(JString name, JInt offset, JInt length, PerfOp o
     if (size_out) *size_out = 0;
     if (!path || !*path || offset < 0 || (op == PERF_RES_BYTES && length <= 0)) {
         if (path) errno = EINVAL;
-        perf_record(op, path, start, 0, 0, 0); perf_poll(0); return NULL;
+        perf_record(op, path, start, 0, 0, 0); return NULL;
     }
     pthread_mutex_lock(&sFileLock);
     ResourceFile temporary = {0};

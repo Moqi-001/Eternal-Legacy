@@ -52,46 +52,6 @@ converts buttons into screen touches:
 
 The screen coordinates are in the tables at the top of `source/controls.c` if you need to adjust them.
 
-## Building
-
-```bash
-export VITASDK=/path/to/vitasdk      # soft-float SDK required
-mkdir -p build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release && make -j
-```
-
-`VITASDK` points to the VitaSDK root directory.
-
-| CMake option | Default | Description |
-|---|---|---|
-| `DATA_PATH` | `ux0:data/EternalLegacy/` | data directory (trailing `/` required) |
-| `PERF_DIAGNOSTICS` | `ON` | print per-second performance summaries to `sceClibPrintf` |
-| `VITA_MSAA` | `0` | multisampling: `0`, `2`, or `4` |
-
-Logging is console-only; `DEBUG_LOGFILE=ON` is rejected. `[PERF]` reports frame
-input/render/swap times in microseconds, FPS as `fps_x100 / 100`, frame-time
-buckets, resource and libc I/O, shader compile/link, submitted texture bytes,
-heap usage and free vitaGL pool memory (every five seconds). Slow calls
-(at least 20 ms) and errors are limited to four details per operation per second.
-Reports also run during loading. Nested timings must not be added together;
-swap includes submission/waiting/vsync and is not a GPU timer. GL counters cover
-direct imports. Concurrent events can straddle adjacent reporting windows.
-Disable `PERF_DIAGNOSTICS` to measure instrumentation overhead.
-
-The Java resource loader retains four read-only descriptors. Native game fopen
-uses a separate 16 MiB immutable content cache (2 MiB per-file limit), independent
-FILE cursors and bounded prefetch of following dialogue voices. Startup voice
-indexing uses a single physical directory inventory and original native map
-helpers; verified read-only KResource callers avoid redundant zero-relative seeks.
-Saves keep native file semantics. A 960×640 logical canvas fits into 816×544 at
-(72,0), with physical and synthetic input adapted consistently. `[IO]` records
-kernel I/O statistics and slow-call paths; `[PRESENT]` records the startup fit.
-Fonts share bytes with independent faces (12 MiB); ZIP entries use an 8 MiB
-decompressed cache. Only sequential BGM uses 64 KiB buffering; ZIP scans retain
-native buffering to avoid seek read amplification. Cache activity and error
-summaries remain enabled. The Chinese README Docker command builds
-`build-docker-release/EternalLegacy.vpk` using the local VitaSDK image.
-
 ## Known limitations
 
 - The intro uses the H.264 video bundled in the VPK, with a data-directory fallback.

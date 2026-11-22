@@ -7,6 +7,7 @@
 #include <psp2/kernel/processmgr.h>
 #include <psp2/power.h>
 #include <psp2/touch.h>
+#include <so_common/so_logger.h>
 
 #include "config.h"
 #include "loader.h"
@@ -28,10 +29,14 @@ int main(int argc, char *argv[]) {
     sceTouchSetSamplingState(SCE_TOUCH_PORT_FRONT, SCE_TOUCH_SAMPLING_STATE_START);
     sceCtrlSetSamplingMode(SCE_CTRL_MODE_ANALOG_WIDE);
 
-    scePowerSetArmClockFrequency(444);
-    scePowerSetBusClockFrequency(222);
-    scePowerSetGpuClockFrequency(222);
-    scePowerSetGpuXbarClockFrequency(166);
+    int arm_clock = scePowerSetArmClockFrequency(444);
+    int bus_clock = scePowerSetBusClockFrequency(222);
+    int gpu_clock = scePowerSetGpuClockFrequency(222);
+    int xbar_clock = scePowerSetGpuXbarClockFrequency(166);
+    so_loga("[CLOCK] requested=444/222/222/166 actual=%d/%d/%d/%d status=%d/%d/%d/%d",
+            scePowerGetArmClockFrequency(), scePowerGetBusClockFrequency(),
+            scePowerGetGpuClockFrequency(), scePowerGetGpuXbarClockFrequency(),
+            arm_clock, bus_clock, gpu_clock, xbar_clock);
 
     soloader_init();
     soloader_run();
